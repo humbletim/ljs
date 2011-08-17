@@ -4,7 +4,8 @@
 -tim Aug 17, 2011
 
 ------
-On Tue, Jul 20, 2010 at 13:16, Matthew Wild [wrote](http://	lua-users.org/lists/lua-l/2010-07/msg00569.html):
+On Tue, Jul 20, 2010 at 13:16, Matthew Wild [wrote](http://lua-users.org/lists/lua-l/2010-07/msg00569.html):
+
 >... So I started on my own venture to write a VM in Javascript by hand:
 http://code.matthewwild.co.uk/ljs/
  
