@@ -1,9 +1,44 @@
 # ljs - Lua VM implemented in Javascript
 
-... ljs [import from mecurial](http://code.matthewwild.co.uk/ljs/) and some fixes of my own soon ...
--tim Aug 17, 2011
+note: bytecode interpreter only (.lua scripts must be compiled to .luac in advance)
 
-------
+originally *ljs-16b833862ae2* from mecurial http://code.matthewwild.co.uk/ljs/ :: [16b833862ae2](http://code.matthewwild.co.uk/ljs/rev/16b833862ae2)
+
+### roadmap:
+
+1. put together an example of how to go from lua source code to js-encoded bytecode
+ * [done -- see Makefile]
+2. neutralize node-specific code in lvm.js, so it can run in any web browser again
+ * [done -- tested in IE6, FF, Chrome, WebKit]
+3. experiment with some [BrowserLua](https://github.com/agladysh/browser-lua) concepts
+ * [attempted -- but may not make sense without working doString, etc. (remember, no compiler, ljs just runs bytecode)]
+4. make a sandbox'd cgi-bin that takes lua code as input and emits js-encoded bytecode (text/javascript)
+5. ... that's it for now!
+
+### to run the legacy node-based tests (which should still work)
+
+    bash tests/run.sh
+    # -> 22/22 TESTS PASSED
+
+### to build and view the web browser test
+
+    make all 
+    firefox demo.html
+ 
+*make all:*
+
+* demo.lua ->
+ * demo.luac *(compiled bytecode)* 
+ * demo.luac.js *(encoded bytecode as html script include)* 
+ * demo.lua.src.html *(pretty source for browser)* 
+ * demo.lua.output.txt *(natural lua output, for comparison)* 
+
+#### dependencies
+
+make all: lua / luac (tested with 5.1.4), perl (if you want lua2html.pl output in browser test)
+
+#### history
+
 On Tue, Jul 20, 2010 at 13:16, Matthew Wild [wrote](http://lua-users.org/lists/lua-l/2010-07/msg00569.html):
 
 >... So I started on my own venture to write a VM in Javascript by hand:
@@ -26,5 +61,5 @@ compiled offline and run in the VM in the browser to compile them.
 >Matthew 
 
 ------
-### License (MIT)
+#### License (MIT/X11)
 see: <http://matthewwild.co.uk/free> -> <http://en.wikipedia.org/wiki/MIT_licence>

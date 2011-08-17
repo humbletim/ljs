@@ -1,5 +1,187 @@
 <html>
-<body>
+  <head>
+	<title>Lua VM in Javascript demo</title>
+
+<script type="text/javascript">
+
+//== trying out https://github.com/agladysh/browser-lua -tim
+
+//== -- BROWSERLUA --
+var BrowserLua = {
+   _filez: {},
+
+   //== BrowserLua.provideFile(path, file_contents_string)
+   provideFile: function(path, file_contents_string) {
+	 this._filez[path] = file_contents_string;
+   }
+};
+//== -- /BROWSERLUA --
+
+</script>
+
+<!-- ... BrowserLua.provideFile("demo.luac", "<bytecode>") -->
+<script type="text/javascript" src="demo.luac.js"></script>
+
+<script type="text/javascript">
+
+// TODO: replace this remaining node-specific stuff in lvm.js
+// -- NODE --
+var stubs = {
+  sys: {
+	_printbuf: "",
+	_outputline: function(s) { 
+	  console.log("sys._outputline: "+s);
+	},
+	puts: function(s) { stubs.sys._outputline("sys.puts: "+s); },
+	print: function(s) { 
+	  // emulate node(?) sys.print behaviour for lvm.js
+	  if (/\n/.test(s)) {
+		stubs.sys._outputline(stubs.sys._printbuf+s);
+		stubs.sys._printbuf = "";
+	  } else
+		stubs.sys._printbuf += s;
+	},
+	inspect: function(s) { return s ; }
+  }
+  // 		,fs: {
+  // 	  readFileSync: function(f) { return filez[f]; }
+  // 	  },
+  // 		,process: {
+  // 	  exit: function() {}
+  // 	  }
+};
+require = function(it) {
+  return (stubs)[it];
+};
+// -- /NODE --
+</script>
+
+<!-- the Lua VM in Javascript core -->
 <script type="text/javascript" src="lvm.js"></script>
-</body>
+
+<script type="text/javascript">
+
+//== -- BROWSERLUA --
+
+//== BrowserLua.init([enabled_backends])
+BrowserLua.init = function() {
+
+  BrowserLua.VM = new LVM();
+  BrowserLua._G = openlibs(BrowserLua.VM);
+
+  //== BrowserLua.doFile(path)
+  BrowserLua.doFile = function(path) {
+	if (!this._filez[path]) throw "ljs.BrowserLua.doFile on non-provideFile'd: "+path;
+	BrowserLua.doString(BrowserLua._filez[path]);
+  };
+
+  //== BrowserLua.doString(lua_code, [chunkname])
+  BrowserLua.doString = function(lua_code) {
+	try {
+	  if (!/^\x1b\x4c\x75\x61\x51\x00/.test(lua_code))
+		throw "ljs.BrowserLua.doString only handles bytecode (no compiler)";
+	  var testvm = this.VM;
+	  var _G = this._G;
+
+	  var f = testvm.loadstring(lua_code, _G);
+	  var ret = testvm.call(f);
+	  if(ret.length)
+		sys.puts("ljs Returned: "+sys.inspect(ret));
+	} catch(e) {
+	  var trace = testvm.traceback();
+	  var currframe = trace[0];
+	  if(currframe)
+		{
+		  sys.print("ljs.BrowserLua.doString: "+
+					currframe.sourceName+":"+currframe.line+": ");
+		}
+	  sys.puts(e);
+	  if(typeof(e) == "object" && "stack" in e)
+		sys.puts(e.stack);
+	  //process.exit(1);
+	}
+  };
+
+  //== BrowserLua.callLua(functionName, args, ...) --> array of return values
+  BrowserLua.callLua = function(functionName) {
+	//TODO: error/argument/type checking
+	var lfunc = this._G.index(this.VM.LValue(functionName));
+	var largs = [];
+	for (var i=1; i < arguments.length; i++)
+	  largs.push(this.VM.LValue(arguments[i]));
+	var ret = this.VM.call(lfunc, largs);
+	var jsret = [];
+	for (var i=0; i < ret.length; i++)
+	  jsret[i] = ret[i].value;
+	return jsret;
+  };
+//== -- /BROWSERLUA --
+
+  // hmmmmmmm
+  BrowserLua._getglobal = function(name) {
+	return this._G.index(this.VM.LValue(name));
+  };
+  BrowserLua._setoutput = function(jsfunc) {
+	var old = stubs.sys._outputline;
+	stubs.sys._outputline = jsfunc;
+	return old;
+  };
+};
+</script>
+
+<script type="text/javascript">
+
+function logtopre(s){
+	  var out = document.getElementById('output');
+	  var eol = document.all ? "<br />" : "";
+	  out.innerHTML += s + (!/\n$/.test(s)?"<br />":eol);
+}
+
+// run the test bytecode
+function browtest() {
+  var old = BrowserLua._setoutput(logtopre);
+  BrowserLua.doFile("demo.luac");
+  BrowserLua._setoutput(old); // i do a lot of testing from Firebug, so reset
+}
+
+window.onload = function() {
+  BrowserLua.init();
+  browtest();
+};
+
+function dump_G() {
+  logtopre("dumping _G");
+  logtopre("----------------");
+  for (var p in BrowserLua._G.value)
+	logtopre(p+"\t"+ BrowserLua._getglobal(p).type);
+}
+
+</script>
+  </head>
+  <body>
+	<button onclick='document.getElementById("output").innerHTML="";'>clear</button>
+	<button onclick='browtest();'>re-run BrowserLua.doFile("demo.luac")</button>
+	<button onclick='dump_G();'>dump _G</button>
+	<hr />
+	<style type="text/css">
+	  pre { padding:4px; border: solid 1px black; }
+	  td { vertical-align: top; width: 50%; }
+	  iframe {  }
+	</style>
+	<table border="1">
+	  <tr><th>result</th><th>expected</th><tr>
+		  <tr>
+			<td>
+			  <pre id='output'></pre>
+			</td>
+			<td>
+			  <iframe src="demo.lua.output.txt"></iframe>
+			</td>
+		  </tr>
+	<tr><td colspan="2" height="1024" >
+	<code>demo.lua</code>
+	<iframe style='width:100%;height:100%;' src="demo.lua.src.html"></iframe>
+	</td></tr>
+	</table>
+  </body>
 </html>

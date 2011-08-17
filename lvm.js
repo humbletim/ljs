@@ -1,3 +1,8 @@
+// Released under MIT/X11 license
+// Copyright (c) 200x-2010 Matthew Wild
+// Copyright (C) 2011 by Tim Dedischew
+
+// TODO: adapt into commonjs module
 
 var OP_MOVE = 0;
 var OP_LOADK = 1;
@@ -782,7 +787,7 @@ LVM.prototype = {
 		var trace = [];
 		for(var i=this.callstack.length-1; i>=0; i--)
 		{
-			var currframe = testvm.callstack[i];
+			var currframe = this.callstack[i];
 			var currfunc = currframe.f;
 			var sourceName = (currfunc.sourceName||"=?").substr(1);
 			var line = "?";
@@ -794,65 +799,65 @@ LVM.prototype = {
 	}
 };
 
-try{
-var testvm = new LVM();
-
+// TODO: abstract these out somehow (maybe BrowserLua had ideas?) -tim
+// SEE: demo.html for remaining browser mocks
 var fs=require("fs");
 var sys=require("sys");
 
-var _G = testvm.LValue([]);
+function openlibs(testvm) {
+  var _G = testvm.LValue([]);
 
-// Standard library
+  // Standard library
 
-var baselib = {
+  var baselib = {
 	error: function (message)
 	{
-		throw message.toString();
+	  throw message.toString();
 	},
 	print: function ()
 	{
-		var args = Array.prototype.slice.call(arguments);
-		sys.print(args[0].toString());
-		for(var i = 1; i<args.length; i++)
-			sys.print("\t"+args[i].toString());
-		sys.print("\n");
-		return [];
+	  var args = Array.prototype.slice.call(arguments);
+	  sys.print(args[0].toString());
+	  for(var i = 1; i<args.length; i++)
+		sys.print("\t"+args[i].toString());
+	  sys.print("\n");
+	  return [];
 	},
 	setmetatable: function (table, metatable)
 	{
-		if(arguments.length!=2)
-			throw "setmetatable expects 2 arguments, got "+arguments.length;
+	  if(arguments.length!=2)
+		throw "setmetatable expects 2 arguments, got "+arguments.length;
 
-		table.setMetatable(metatable);
-		return [table];
+	  table.setMetatable(metatable);
+	  return [table];
 	},
 	type: function (o)
 	{
-		return [this.LValue(o.type)];
+	  return [this.LValue(o.type)];
 	},
 	assert: function (expr, message)
 	{
-		if(!expr.truth())
-			if(message && message.truth())
-				throw message;
-			else
-				throw "assertion failed";
-		return [expr];
+	  if(!expr.truth())
+		if(message && message.truth())
+		  throw message;
+		else
+		  throw "assertion failed";
+	  return [expr];
 	}
-};
+  };
 
-var math = {
+  var math = {
 	ldexp: function (m, e)
 	{
-		return [this.LValue(m.value*Math.pow(2, e.value))];
+	  return [this.LValue(m.value*Math.pow(2, e.value))];
 	},
 	floor: function (x)
 	{
-		return [this.LValue(Math.floor(x.value))];
+	  return [this.LValue(Math.floor(x.value))];
 	}
-};
+  };
 
-var _patternClasses = {
+  var _patternClasses = {
 	"a": "[A-Za-z]", "A": "[^A-Za-z]",
 	"p": "[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]",
 	"P": "[^\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]",
@@ -863,157 +868,163 @@ var _patternClasses = {
 	"x": "[0-9A-Fa-f]", "X": "[^0-9A-Fa-f]",
 	"z": "[\x00]", "Z": "[^\x00]",
 	"l": "[a-z]", "L": "[^a-z]",
-	"c": "[\x00-\x1f\x7f]", "C": "[^\x00-\x1f\x7f]",
-};
+	"c": "[\x00-\x1f\x7f]", "C": "[^\x00-\x1f\x7f]"
+  };
 
-var _patternToRegExp = function (patt)
-{
-	var regexp = "";
-	for(var i=0;i<patt.length;i++)
+  var _patternToRegExp = function (patt)
 	{
-		var c = patt[i];
-		if(c == "%")
+	  var regexp = "";
+	  for(var i=0;i<patt.length;i++)
 		{
-			c = patt[++i];
-			if(c == "b")
+		  var c = patt[i];
+		  if(c == "%")
 			{
-				throw "%b not supported in patterns";
-			}
-			else if(c >= "0" && c <= "9")
-			{
-				regexp += ("\\"+c);
-				continue;
-			}
-			else
-			{
-				var cls = _patternClasses[c];
-				if(cls)
+			  c = patt[++i];
+			  if(c == "b")
 				{
-					regexp += cls;
-					continue;
+				  throw "%b not supported in patterns";
+				}
+			  else if(c >= "0" && c <= "9")
+				{
+				  regexp += ("\\"+c);
+				  continue;
+				}
+			  else
+				{
+				  var cls = _patternClasses[c];
+				  if(cls)
+					{
+					  regexp += cls;
+					  continue;
+					}
 				}
 			}
-		}
-		else if(c == "\\" || c == "/")
+		  else if(c == "\\" || c == "/")
 			regexp += "\\"; // Escape escapes
-		regexp += c;
-	}
-	return new RegExp(regexp, "g");
-};
+		  regexp += c;
+		}
+	  return new RegExp(regexp, "g");
+	};
 
-var string = {
+  var string = {
 	"char": function ()
 	{
-		var nArgs = arguments.length;
-		if(nArgs < 1)
-			throw "string.char(): Expects at least 1 parameter";
-		var results = [];
-		for(var i=0; i<nArgs; i++)
+	  var nArgs = arguments.length;
+	  if(nArgs < 1)
+		throw "string.char(): Expects at least 1 parameter";
+	  var results = [];
+	  for(var i=0; i<nArgs; i++)
 		{
-			var code = arguments[i];
-			if(code.type != "number")
-				throw "string.char(): Argument #"+(i+1)+" expected number, got "+code.type;
-			results.push(String.fromCharCode(code.value));
+		  var code = arguments[i];
+		  if(code.type != "number")
+			throw "string.char(): Argument #"+(i+1)+" expected number, got "+code.type;
+		  results.push(String.fromCharCode(code.value));
 		}
-		return [this.LValue(results.join(''))];
+	  return [this.LValue(results.join(''))];
 	},
 	find: function (str, patt, init, plain)
 	{
-		if(arguments.length > 2)
-			throw "string.find(): No more than the first 2 arguments supported";
-		var re = _patternToRegExp(patt.value);
-		var result = re.exec(str);
-		if(!result)
-			return [this.LValue(null)];
-		var start = result.index+1;
-		var end = start + result[0].length - 1;
-		var ret = [this.LValue(start), this.LValue(end)];
-		for(var i=1; i<result.length; i++)
-			ret.push(this.LValue(result[i]));
-		return ret;
+	  if(arguments.length > 2)
+		throw "string.find(): No more than the first 2 arguments supported";
+	  var re = _patternToRegExp(patt.value);
+	  var result = re.exec(str);
+	  if(!result)
+		return [this.LValue(null)];
+	  var start = result.index+1;
+	  var end = start + result[0].length - 1;
+	  var ret = [this.LValue(start), this.LValue(end)];
+	  for(var i=1; i<result.length; i++)
+		ret.push(this.LValue(result[i]));
+	  return ret;
 	},
 	format: function (format_)
 	{
-		var format = format_.value, result = "";
-		var re = new RegExp("%([0-9. ]*)([a-zA-Z%])", "g");
-		var match, currpos = 0, currparam = 1;
-		while(match = re.exec(format))
+	  var format = format_.value, result = "";
+	  var re = new RegExp("%([0-9. ]*)([a-zA-Z%])", "g");
+	  var match, currpos = 0, currparam = 1;
+	  while(match = re.exec(format))
 		{
-			result += format.substring(currpos, match.index);
-			currpos = re.lastIndex;
-			switch(match[2])
+		  result += format.substring(currpos, match.index);
+		  currpos = re.lastIndex;
+		  switch(match[2])
 			{
 			case "f": case "d":
-				if(match[1].length>0)
-					throw "string.format(): Number format modifers not yet implemented";
+			  if(match[1].length>0)
+				throw "string.format(): Number format modifers not yet implemented";
 			case "s":
-				result+=arguments[currparam++].value.toString();
+			  result+=arguments[currparam++].value.toString();
 			case "%":
-				break;
+			  break;
 			default:
-				throw "string.format(): Format %"+match[2]+" not implemented";
+			  throw "string.format(): Format %"+match[2]+" not implemented";
 			}
 		}
-		result += format.substring(currpos);
-		return [this.LValue(result)];
+	  result += format.substring(currpos);
+	  return [this.LValue(result)];
 	},
 	gmatch: function (str, patt)
 	{
-		var re = _patternToRegExp(patt.value);
-		var matches = str.value.match(re)||[];
-		var curr = 0;
-		var iter = function ()
-		{
-			return [this.LValue(matches[curr++])];
-		};
-		return [this.LValue(iter)];
+	  var re = _patternToRegExp(patt.value);
+	  var matches = str.value.match(re)||[];
+	  var curr = 0;
+	  var iter = function ()
+	  {
+		return [this.LValue(matches[curr++])];
+	  };
+	  return [this.LValue(iter)];
 	},
 	sub: function (str, from, to)
 	{
-		var result;
-		switch(arguments.length)
+	  var result;
+	  switch(arguments.length)
 		{
 		case 0:
 		case 1:
-			throw "string.sub(): Expected 2 or more arguments";
+		  throw "string.sub(): Expected 2 or more arguments";
 		case 2:
-			result = str.value.substring(from.value);
+		  result = str.value.substring(from.value);
 		case 3:
-			result = str.value.substring(from.value, to.value);
+		  result = str.value.substring(from.value, to.value);
 		}
-		return [this.LValue(result)];
+	  return [this.LValue(result)];
 	}
-};
-testvm.registerLib(_G, null, baselib);
-testvm.registerLib(_G, "math", math);
-testvm.registerLib(_G, "string", string);
+  };
+  testvm.registerLib(_G, null, baselib);
+  testvm.registerLib(_G, "math", math);
+  testvm.registerLib(_G, "string", string);
+  _G.setIndex(testvm.LValue("_G"), _G);
 
-// Metatable on environment to print out nil global accesses
-var mt = testvm.LValue([]);
-mt.setIndex(
-	testvm.LValue("__index"),
-	testvm.LValue(function (t, k) { sys.puts("Access of nil global: "+k); })
-);
-_G.setMetatable(mt);
-
-
-var f = testvm.loadstring(fs.readFileSync("luac.out", "binary"), _G);
-
-var ret = testvm.call(f);
-if(ret)
-	sys.puts("Returned: "+sys.inspect(ret));
-
+  // Metatable on environment to print out nil global accesses
+  var mt = testvm.LValue([]);
+  mt.setIndex(
+			  testvm.LValue("__index"),
+			  testvm.LValue(function (t, k) { sys.puts("Access of nil global: "+k); })
+			  );
+  _G.setMetatable(mt);
+  return _G;
 }
-catch(e)
-{
+
+if (typeof process != 'undefined') { // node
+  try {
+	var testvm = new LVM();
+	var _G = openlibs(testvm);
+ 
+	var f = testvm.loadstring(fs.readFileSync("luac.out", "binary"), _G);
+
+	var ret = testvm.call(f);
+	if(ret)
+	  sys.puts("Returned: "+sys.inspect(ret));
+
+  } catch(e) {
 	var trace = testvm.traceback();
 	var currframe = trace[0];
 	if(currframe)
-	{
+	  {
 		sys.print("lvm.js: "+currframe.sourceName+":"+currframe.line+": ");
-	}
+	  }
 	sys.puts(e);
 	if(typeof(e) == "object" && "stack" in e)
-		sys.puts(e.stack);
+	  sys.puts(e.stack);
 	process.exit(1);
-}
+  }
+ }
