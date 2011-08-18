@@ -64,14 +64,38 @@ LValue.prototype = {
 	{
 		if(this.type == "function")
 			return this.value;
-		else
-			throw "Attempt to call a " + this.type + " value";
+		var func = this;
+		if(func.type == "table" &&
+		   func.metatable && func.metatable.type != "nil") {
+		  var tfunc = this.metatable.index(this.vm.LValue("__call"));
+		  if (tfunc.type == 'function') {
+			return function() {
+			  var cargs = [func].concat(Array.prototype.slice.call(arguments));
+			  //console.warn("_call", cargs[0],cargs[1],cargs[2]);
+			  return tfunc.call(cargs);
+			};
+		  }
+		}
+
+		throw "Attempt to call a " + this.type + " value";
 	},
 	index: function (key, raw)
 	{
+//TODO: string metas like "val:find(" -> "string.find(val," -t
+// 	  if (this.type == 'string' && raw != true) {
+// 		if (key.value == "find")
+// 		  sys.print( this.vm)
+// 		return 
+// 	  }
+
 		if(this.type == "table")
 		{
 			var val;
+//  TODO: ipairs support, and how to match 0 vs. 1 indexing 
+// 			if (key.type == 'number') {
+// 			  if ((key.value-1) in this.value)
+// 				return this.value[key.value-1];
+// 			}
 			if(key.value in this.value)
 				return this.value[key.value];
 			else if(raw != true && this.metatable && this.metatable.type != "nil")
@@ -79,7 +103,10 @@ LValue.prototype = {
 				var __index = this.metatable.index(this.vm.LValue("__index"));
 				if(__index.type == "function")
 				{
-					return this.vm.LValue(__index.call([this, key])[0]);
+				  // VERIFY: looks like [0] already LValue or undefined...
+				  //     trying it without wrapping in another LValue -t
+				  var ret = /*this.vm.LValue(*/__index.call([this, key])[0] /*)*/;
+				  if (ret) return ret;
 				}
 				else if(__index.type != "nil")
 					return __index.index(key);
@@ -107,15 +134,32 @@ LValue.prototype = {
 		else
 			throw "Attempt to set a "+metatable.type+" value as a metatable";
 	},
+	getMetatable: function ()
+	{
+	  return this.metatable;
+	},
+	_getMeta: function (jstr)
+	{
+	  //this.type == 'table' ?
+	  if(this.metatable) {
+		var __mm = this.vm.LValue(jstr);
+		var meta = this.metatable.index(__mm);
+		if (meta && meta.type != "nil")
+		  return meta;
+	  }
+	  return false;
+	},
 	toString: function ()
 	{
-		switch(this.type)
-		{
-		case "nil":
-			return "nil";
-		default:
-			return this.value.toString();
-		}
+	  if (this.type == "nil") return "nil";
+	  
+	  var metamethod = this._getMeta("__tostring");
+	  if (metamethod)
+		return metamethod.call([this]).toString();
+
+	  if (this.type == "table") return "table: 0xLVM";
+
+	  return this.value.toString();
 	},
 	truth: function ()
 	{
@@ -457,7 +501,9 @@ LVM.prototype = {
 				break;
 			case OP_GETUPVAL:
 				var upvalue = frame.f.upvalues[INS_B(instruction)];
-				frame.reg[INS_A(instruction)] = new LValue(this, upvalue.type, upvalue.value);
+				// FIXME: not sure why this was previously copying the upvalue?
+				//  (.metatable is lost taht way, so trying direct ref...) -t
+				frame.reg[INS_A(instruction)] = upvalue;//new LValue(this, upvalue.type, upvalue.value);
 				break;
 			case OP_GETGLOBAL:
 				var name = frame.f.constants[INS_Bx(instruction)];
@@ -676,8 +722,14 @@ LVM.prototype = {
 				var B = INS_B(instruction);
 				var C = INS_C(instruction);
 				var values = [];
-				for(var i = B; i<=C; i++)
+				for(var i = B; i<=C; i++) {
+				  if (frame.reg[i].type == 'number' ||
+					  frame.reg[i].type == 'string')
 					values.push(frame.reg[i].value);
+				  else
+					throw "attempt to concatenate <"+frame.reg[i]+"> (a "+
+					  frame.reg[i].type+" value)";
+				}
 				frame.reg[A] = new LValue(this, "string", values.join(''));
 				break;
 			case OP_ADD:
@@ -775,6 +827,7 @@ LVM.prototype = {
 		
 		for(var k in lib)
 			t.setIndex(this.LValue(k), this.LValue(lib[k]));
+		return t;
 	},
 	loadstring: function (chunk, env)
 	{
@@ -831,9 +884,17 @@ function openlibs(testvm) {
 	  table.setMetatable(metatable);
 	  return [table];
 	},
+	getmetatable: function(table)
+	{
+	  return table.type == 'table' ? [table.getMetatable()] : [];
+	},
 	type: function (o)
 	{
 	  return [this.LValue(o.type)];
+	},
+	tostring: function(o)
+	{
+	  return [this.LValue(o.toString())];
 	},
 	assert: function (expr, message)
 	{
@@ -853,7 +914,18 @@ function openlibs(testvm) {
 	},
 	floor: function (x)
 	{
-	  return [this.LValue(Math.floor(x.value))];
+		return [this.LValue(Math.floor(x.value))];
+	},
+	sqrt: function (x)
+	{
+		return [this.LValue(Math.sqrt(x.value))];
+	},
+	random: function ()
+	{
+	  if(arguments.length!=0)
+		throw "math.random arguments not implemente";
+
+		return [this.LValue(Math.random())];
 	}
   };
 
@@ -926,6 +998,8 @@ function openlibs(testvm) {
 	{
 	  if(arguments.length > 2)
 		throw "string.find(): No more than the first 2 arguments supported";
+	  if (str.type != 'string')
+		throw "bad argument #1 to 'find' (string expected, got "+str.type+")"
 	  var re = _patternToRegExp(patt.value);
 	  var result = re.exec(str);
 	  if(!result)
@@ -998,7 +1072,7 @@ function openlibs(testvm) {
   var mt = testvm.LValue([]);
   mt.setIndex(
 			  testvm.LValue("__index"),
-			  testvm.LValue(function (t, k) { sys.puts("Access of nil global: "+k); })
+			  testvm.LValue(function (t, k) { sys.puts("(debug) Access of nil global: "+k); })
 			  );
   _G.setMetatable(mt);
   return _G;
