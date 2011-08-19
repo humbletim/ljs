@@ -1,3 +1,19 @@
+print("_VERSION", _VERSION)
+
+-- NOTE: this is here temporarily to test require/module support...
+print('----------- module test -------- ')
+print('all args', ...)
+print(require'testmodule'.passmex("x"))
+require'testmodule2' -- note: does module("test") returning 5
+print("package.loaded.testmodule2 = ", package.loaded.testmodule2)
+print("test.passme('x') = ",test.passmex("x"))
+print('testmodule._NAME:',require'testmodule'._NAME)
+print('test._NAME:',test._NAME)
+local tmp = ...
+print('first arg', tmp)
+print('----------- /module test -------- \n')
+-- /////////////
+
 -- account.lua
 -- from PiL 1, Chapter 16
 

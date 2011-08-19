@@ -1,8 +1,19 @@
+// ljs/lvm.js -- Lua VM in Javascript
+
 // Released under MIT/X11 license
 // Copyright (c) 200x-2010 Matthew Wild
-// Copyright (C) 2011 by Tim Dedischew
+// Copyright (C) 2011 Tim Dedischew
 
 // TODO: adapt into commonjs module
+
+// EXAMPLE node: luac <input.lua> && node lvm.js
+// EXAMPLE browser: see demo.html
+
+var _VERSION = "Lua 5.1(ish) in Javascript"
+
+// TODO: find a generic javascript logger
+// SEE: demo.html for browser stubs
+var sys=require("sys");
 
 var OP_MOVE = 0;
 var OP_LOADK = 1;
@@ -45,6 +56,8 @@ var OP_VARARG = 37;
 
 var debugMode = false;
 
+var logOP_VARG = sys.debug || function() {};
+
 function LValue(vm, type, value)
 {
 	this.vm = vm;
@@ -71,7 +84,6 @@ LValue.prototype = {
 		  if (tfunc.type == 'function') {
 			return function() {
 			  var cargs = [func].concat(Array.prototype.slice.call(arguments));
-			  //console.warn("_call", cargs[0],cargs[1],cargs[2]);
 			  return tfunc.call(cargs);
 			};
 		  }
@@ -152,6 +164,7 @@ LValue.prototype = {
 	toString: function ()
 	{
 	  if (this.type == "nil") return "nil";
+	  if (this.type == "function") return "function: 0xLVM";
 	  
 	  var metamethod = this._getMeta("__tostring");
 	  if (metamethod)
@@ -429,6 +442,8 @@ LVM.prototype = {
 		{
 		case "number":
 			return new LValue(this, "number", value);
+		case "boolean":
+			return new LValue(this, "boolean", value != 0);
 		case "string":
 			return new LValue(this, "string", value);
 		case "function":
@@ -454,15 +469,25 @@ LVM.prototype = {
 		}
 		else if(f.instructions)
 		{
-			var frame = {f:f,pc:0,entry:true};
-			if(args)
-				frame.reg = args.slice(0);
-			else
-				frame.reg = [];
-			this.callstack.push(frame);
-			for(var i=frame.reg.length;i<f.maxStackSize;i++)
-				frame.reg[i] = this.LValue(null);
-			return this.run(frame);
+		  var frame = {f:f,pc:0,entry:true};
+		  if(args)
+			frame.reg = args.slice(0);
+		  else
+			frame.reg = [];
+		  this.callstack.push(frame);
+
+		  if (this.callstack.length == 1 && frame.reg.length > 0) {
+			logOP_VARG("(verify) OP_VARG top-level workaround..."+
+					   frame.reg[0]);
+			this._arg = frame.reg.slice(0);
+			var ret = this.run(frame);
+			this._arg = null;
+			return ret;
+		  }
+
+		  for(var i=frame.reg.length;i<f.maxStackSize;i++)
+			frame.reg[i] = this.LValue();
+		  return this.run(frame);
 		}
 		else
 			throw "Attempt to call invalid function object: "+f.toString();
@@ -540,10 +565,24 @@ LVM.prototype = {
 				var A = INS_A(instruction);
 				var prevframe = this.callstack[this.callstack.length-2];
 				var base = frame.retAt+frame.f.numParameters;
+
+				// FIXME: workaround for top-level varargs (main program)
+				if (!prevframe && 
+					frame.entry == true && 
+					this.callstack.length == 1 &&
+					this._arg
+				   ) {
+				  logOP_VARG("(verify) OP_VARARG patching top-level main chunk");
+				  prevframe = { reg: this._arg || [] }
+				  base = -1;
+				}
+
 				var available = (prevframe.reg.length - base) - 1;
 				var wanted = INS_B(instruction)-1;
+				if (prevframe.reg == this._arg)
+				  logOP_VARG("(verify) OP_VARARGs patched..."+sys.inspect({wanted: wanted, available: available}))
 				if(wanted < 0)
-					wanted = available;
+				  wanted = available;
 				for(var i = 0; i<wanted; i++)
 				{
 					if(i<available)
@@ -559,7 +598,7 @@ LVM.prototype = {
 					var A = INS_A(instruction), B = INS_B(instruction);
 					var undefined, args;
 					if(B != 1)
-						args = frame.reg.slice(A+1, B==0?undefined:(A+B));
+						args = frame.reg.slice(A+1, B==0?frame.reg.length:(A+B));
 					else
 						args = [];
 					if(args.length > f.numParameters)
@@ -576,7 +615,7 @@ LVM.prototype = {
 				var undefined;
 				var args;
 				if(B != 1)
-					args = frame.reg.slice(A+1, B==0?undefined:(A+B));
+					args = frame.reg.slice(A+1, B==0?frame.reg.length:(A+B));
 				else
 					args = [];
 				if(B != 0)
@@ -852,11 +891,7 @@ LVM.prototype = {
 	}
 };
 
-// TODO: abstract these out somehow (maybe BrowserLua had ideas?) -tim
-// SEE: demo.html for remaining browser mocks
-var fs=require("fs");
-var sys=require("sys");
-
+// TODO: keep refactoring...
 function openlibs(testvm) {
   var _G = testvm.LValue([]);
 
@@ -869,6 +904,7 @@ function openlibs(testvm) {
 	},
 	print: function ()
 	{
+	  if (arguments.length == 0) throw "print called without arguments";
 	  var args = Array.prototype.slice.call(arguments);
 	  sys.print(args[0].toString());
 	  for(var i = 1; i<args.length; i++)
@@ -1063,10 +1099,135 @@ function openlibs(testvm) {
 	  return [this.LValue(result)];
 	}
   };
+
+  // -----------------------------------------
+  /* experimental module/require support */
+
+  var modlog = sys.debug || function(){};//sys.puts
+  var modlogV = sys.debug || function(){};//sys.puts
+  // yeah, javascript "with"... ;)
+  with(testvm.registerLib(_G, "package", { 
+	seeall: "seeall",
+	loaded: [],
+	preload: []
+  })) { // cache the final lvalues
+	_G._packageloaded = index(testvm.LValue("loaded"));
+	_G._packagepreload = index(testvm.LValue("preload"));
+  };
+  
+  baselib.module = function(name, opt) {
+	modlog("emulating module('"+name+"', "+opt+")");
+	// FIXME: OP_VARARG (...) doesnt seem to work in main chunks
+	//    but... the right data does seems to be there farther upstack
+	if (name.type == 'nil' && this.callstack.length >= 2) {
+	  var vargs = this.callstack[this.callstack.length-2].reg;
+	  var dotdotdotseeall = this.callstack[this.callstack.length-1].reg;
+	  if (dotdotdotseeall.length > 0) {
+		opt = dotdotdotseeall[dotdotdotseeall.length-1];
+		modlogV("(verify) found module(..., XYZ), XYZ="+opt);
+	  }
+	  name = vargs[vargs.length-1];
+	  opt = vargs[vargs.length]||opt;
+	  modlogV("(verify) emulated module(...): module('"+name+"', "+opt+")");
+	}
+
+	if (!name || name.type != 'string') 
+	  throw "bad argument #1 to 'module' (string expected, got "+
+		(name?name.type:"no")+" value)"; 
+
+	// VERIFY: is this OK way to fetch _M via upstackvalue?
+	var _M = this.callstack[this.callstack.length-1].f.environment;
+	if (!_M._module_name)
+	  throw "lvm.js ... internal error retrieving _M above";
+
+ 	if (!opt || opt.value != "seeall") {
+	  modlog("resetting _M environment (!seeall)..."+name);
+	  // nuke everything except for _M from global environment...
+ 	  for (var p in _M.value) {
+		if (p != "_M") {
+		  delete _M.value[p];
+		}
+ 	  }
+	}
+
+	modlog("resetting module name..."+name);
+	_M._module_name = name
+
+	return [];
+  };
+
+  baselib.require = function (name) {
+	var _M = _G._packageloaded.index(name);
+	if (_M.type != 'nil')
+	  return [_M];
+
+	var f = _G._packagepreload.index(name);
+	modlog("package.preload["+name+"] == "+f+"\n");
+	if (f.type != 'nil') {
+	  _M = this.LValue([]);
+	  testvm.registerLib(_M, null, baselib);
+	  for (var p in _G.value) {
+		//sys.puts("_G."+p+" -> _M."+p);
+		p = this.LValue(p);
+		_M.setIndex(p, _G.index(p));
+	  }
+	  _M.setIndex(this.LValue("_M"), _M);
+
+	  _M._module_name = name; // internal flag
+
+	  //	  f.environment = _M;
+
+	  // FIXME: passing second parameter of _M not to spec
+	  // but not sure how to get this to javascript _setpreload otherwise..
+	  var loaded = this.call(f, [name,_M])[0] || this.LValue(null);
+
+	  if (loaded) {
+		// 		sys.print("_M now"+_M);
+		// 		sys.print("loaaded:"+loaded);
+		if (_M._module_name != name) 
+		  modlogV("(verify) require'"+name+"'"+
+				   ", but module'"+_M._module_name+"'");
+
+		// http://www.lua.org/manual/5.1/manual.html#5.3
+		if (loaded.type == 'nil') {
+		  modlogV("(verify) no module return value, using package.loaded.");
+		  loaded = _G._packageloaded.index(name);
+		}
+		if (loaded.type == 'nil') {
+		  modlogV("(verify) no package.loaded, so setting to true...");
+		  loaded = this.LValue(true);
+		}
+		modlog("package.loaded["+name+"] = "+loaded+"!\n");
+		_G._packageloaded.setIndex(name, loaded);
+
+		name = _M._module_name;
+
+		modlog("_G["+name+"] = "+_M+"!\n");
+		_G.setIndex(name, _M)
+
+		_M.setIndex(this.LValue("_NAME"), name);
+		//TODO: _M._PACKAGE?
+
+		return [_M];
+	  }
+	}
+	throw "module '"+name+"' not found:\n"+
+	      "\tno field package.preload['"+name+"']";
+  };
+  testvm._setpreload = function(name, loader) {
+	var domod = this.LValue(function(name, M) {
+							  return [loader.apply(M,[name.value,M])];
+							});
+	_G._packagepreload.setIndex(this.LValue(name), 
+								domod);
+  };
+  // -----------------------------------------------------
+	
   testvm.registerLib(_G, null, baselib);
   testvm.registerLib(_G, "math", math);
   testvm.registerLib(_G, "string", string);
   _G.setIndex(testvm.LValue("_G"), _G);
+  _G.setIndex(testvm.LValue("_VERSION"), testvm.LValue(_VERSION));
 
   // Metatable on environment to print out nil global accesses
   var mt = testvm.LValue([]);
@@ -1078,16 +1239,38 @@ function openlibs(testvm) {
   return _G;
 }
 
+// TODO: if/when this becomes a js module
+// ... exports.LVM = LVM, etc.
+// ...  move this to standalone file!
 if (typeof process != 'undefined') { // node
+  var fs=require("fs");
   try {
 	var testvm = new LVM();
 	var _G = openlibs(testvm);
- 
+
+	// ----------------------------------------------------------------------
+	// TODO: could automatically compile .lua to bytecode for node version...
+	var _loadmodule = function(nm) {
+	  sys.debug("_loadmodule..."+this);
+	  var m = testvm.loadstring(fs.readFileSync(nm+".out", 
+												"binary"), this);
+	  return m.call([testvm.LValue(nm)])[0];
+	}
+	testvm._setpreload("testmodule", _loadmodule);
+	testvm._setpreload("testmodule2", _loadmodule);
+	// -----------------------------------
+
 	var f = testvm.loadstring(fs.readFileSync("luac.out", "binary"), _G);
 
-	var ret = testvm.call(f);
+	//	debugMode = true;
+	var arg = [];
+	for (var i=2; /* +2 bc [0] is process name [1] is script name*/
+		 i < process.argv.length; i++)
+	  arg.push(testvm.LValue(process.argv[i]));
+
+	var ret = testvm.call(f, arg);
 	if(ret)
-	  sys.puts("Returned: "+sys.inspect(ret));
+	  sys.debug("Returned: "+sys.inspect(ret));
 
   } catch(e) {
 	var trace = testvm.traceback();

@@ -63,11 +63,13 @@ pre.code {
   padding: 0.5em;
   margin-left: 2em;
   */
+  white-space: pre-wrap
 }
 span.comment { color: #00a000; }
 span.string { color: #0000c0; }
 span.keyword { color: #a00000; font-weight: bold; }
 span.library { color: #a000a0; }
+body { overflow:hiden; width:90%; margin:0;margin-left:4px; }
 </style>
 <body>
 $txt

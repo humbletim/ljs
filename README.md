@@ -1,24 +1,32 @@
 # ljs - Lua VM implemented in Javascript
 
-note: bytecode interpreter only (.lua scripts must be compiled to .luac in advance)
+note: bytecode interpreter only
+(.lua scripts must be compiled to .luac in advance)
 
-originally *ljs-16b833862ae2* from mecurial http://code.matthewwild.co.uk/ljs/ :: [16b833862ae2](http://code.matthewwild.co.uk/ljs/rev/16b833862ae2)
+originally *ljs-16b833862ae2* from mecurial
+  http://code.matthewwild.co.uk/ljs/ :: 
+  [16b833862ae2](http://code.matthewwild.co.uk/ljs/rev/16b833862ae2)
 
 ### roadmap:
 
-1. put together an example of how to go from lua source code to js-encoded bytecode
+1. put together an example of how to go from lua source code to js-encoded
+   bytecode
  * [done -- see Makefile]
-2. neutralize node-specific code in lvm.js, so it can run in any web browser again
- * [done -- tested in IE6, FF, Chrome, WebKit]
-3. experiment with some [BrowserLua](https://github.com/agladysh/browser-lua) concepts
- * [attempted -- but may not make sense without working doString, etc. (remember, no compiler, ljs just runs bytecode)]
-4. make a sandbox'd cgi-bin that takes lua code as input and emits js-encoded bytecode (text/javascript)
+2. neutralize node-specific code in lvm.js, so project can run in any web
+   browser again
+ * [done -- tested in IE6, FF, Chrome, WebKit, Opera]
+3. experiment with some [BrowserLua](https://github.com/agladysh/browser-lua) 
+   concepts
+ * [attempted -- but may not make sense without working doString, etc. 
+   (remember, no compiler, ljs just runs bytecode)]
+4. make a sandbox'd cgi-bin that takes lua code as input and emits js-encoded
+   bytecode (text/javascript)
 5. ... that's it for now!
 
 ### to run the legacy node-based tests (which should still work)
 
     bash tests/run.sh
-    # -> 22/22 TESTS PASSED
+    # -> 32/32 TESTS PASSED
 
 ### to build and view the web browser test
 
@@ -28,14 +36,17 @@ originally *ljs-16b833862ae2* from mecurial http://code.matthewwild.co.uk/ljs/ :
 *make all:*
 
 * demo.lua ->
- * demo.luac *(compiled bytecode)* 
- * demo.luac.js *(encoded bytecode as html script include)* 
- * demo.lua.src.html *(pretty source for browser)* 
- * demo.lua.output.txt *(natural lua output, for comparison)* 
+ * demo.lua.output.txt *(build host's lua output, for comparison)* 
+ *  .luac *(compiled bytecode)* 
+ *  .luac.js *(encoded bytecode as html script include)* 
+ *  .lua.src.html *(pretty source for browser)* 
 
 #### dependencies
 
-make all: lua / luac (tested with 5.1.4), perl (if you want lua2html.pl output in browser test)
+make all: lua / luac (tested with 5.1.4),
+  make, bash,
+  perl (lua2html.pl for output in browser test),
+  node (for running tests)
 
 #### history
 
@@ -62,4 +73,5 @@ compiled offline and run in the VM in the browser to compile them.
 
 ------
 #### License (MIT/X11)
-see: <http://matthewwild.co.uk/free> -> <http://en.wikipedia.org/wiki/MIT_licence>
+see: <http://matthewwild.co.uk/free> ->
+  <http://en.wikipedia.org/wiki/MIT_licence>

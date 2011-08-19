@@ -1,42 +1,81 @@
-define LUAC2JS
--- quick bytecode-to-javascript encoder
--- javascript: BrowserLua.provideFile("demo.luac","<bytecode>");
--- TODO: put somewhere else
-
-local bc = io.open("demo.luac","rb"):read("*all")
-
-io.write[[
-BrowserLua.provideFile("demo.luac",
-"]]
-
-for i in bc:gmatch(".") do
-   io.write(string.format("\\x%02x", i:byte(1)))
-end
-
-io.write[[");
-]]
--- 
-endef
-export LUAC2JS
+# TODO: makefile is too specific, need a good way to organize > 1 demos...
 
 all: demo.html
 
-demo.html: demo.luac.js demo.lua.output.txt demo.lua.src.html
+demo.html: demo.lua.output.html \
+	       	demo.luac.js demo.lua.src.html \
+                 testmodule.luac.js testmodule2.luac.js \
+	             testmodule.lua.src.html testmodule2.lua.src.html
 
-demo.luac.js: demo.luac
-	lua -e "$$LUAC2JS" > demo.luac.js
+testmodule.luac.js: testmodule.lua
+	luac -o $<c $<
+	lua util/luac2js.lua $<c > $@
 
-demo.luac: demo.lua
-	luac -o demo.luac demo.lua
+testmodule2.luac.js: testmodule2.lua
+	luac -o $<c $<
+	lua util/luac2js.lua $<c > $@
 
-demo.lua.output.txt: demo.lua
-	lua demo.lua > demo.lua.output.txt 2>&1 || true
+testmodule.lua.src.html: testmodule.lua
+	perl util/lua2html.pl $< > $@
+
+testmodule2.lua.src.html: testmodule2.lua
+	perl util/lua2html.pl $< > $@
+
+demo.luac.js: demo.lua
+	# $< = demo.lua, $@ = demo.luac.js
+	luac -o $<c $<
+	lua util/luac2js.lua $<c > $@
+
+demo.lua.output.html: demo.lua
+	( echo "<pre style='font-size:.9em'>" ; make -s lua-run ; \
+	  echo "</pre>" ) > demo.lua.output.html 2>&1 || true
 
 demo.lua.src.html: demo.lua
-	perl util/lua2html.pl demo.lua > demo.lua.src.html
+	perl util/lua2html.pl $< > $@
 
-test:
+# this approximates web browser test, using ndoe
+node-run:
+	luac -o testmodule.out testmodule.lua
+	luac -o testmodule2.out testmodule2.lua
+	luac -o luac.out demo.lua
+	node lvm.js '(top-level arg ...)' '(top-level arg 2...)'
+
+node-run-quiet:
+	@make -s node-run 2>/dev/null
+
+run: node-run-quiet 
+
+# this approximates web browser test, using lua
+lua-run:
+	env LUA_PATH=./?.lua lua demo.lua \
+	  '(top-level arg ...)' '(top-level arg 2...)'
+
+lua-run-quiet:
+	@make -s lua-run 2>/dev/null
+
+# useful when dealing with subtleties
+nodeeqlua:
+	@bash -c 'A=$$(make node-run-quiet);B=$$(make lua-run-quiet);\
+	    [ "$$A" == "$$B" ] && echo "node-run-quiet == lua-run-quiet" || ( \
+	  (echo "----- node -----" ; make -s node-run-quiet ) > A.out.txt ; \
+	  (echo "----- lua  -----" ; make -s lua-run-quiet ) > B.out.txt ; \
+	  sdiff -l -w 80 B.out.txt A.out.txt ; \
+	  rm A.out.txt B.out.txt ) '
+
+# sanity check to make sure these run in stock lua
+pretest:
+	@echo "---  running tests/pass/*.lua through lua ---"
+	@sh -c 'for x in tests/pass/*.lua ; \
+	   do lua $$x >/dev/null || exit; done \
+	   && echo lua tests/pass/\*.lua ran OK'
+
+# run legacy node-based test framework
+test: pretest
 	bash tests/run.sh
 
 clean:
-	rm -v luac.out demo.luac demo.luac.js demo.lua.output.txt demo.lua.src.html
+	rm -vf demo.luac testmodule.luac testmodule2.luac
+	rm -vf demo.luac.js testmodule.luac.js testmodule2.luac.js
+	rm -vf demo.lua.output.html
+	rm -vf demo.lua.src.html testmodule.lua.src.html testmodule2.lua.src.html
+	rm -vf luac.out testmodule.out testmodule2.out
