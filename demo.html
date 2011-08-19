@@ -193,7 +193,7 @@ BrowserLua.init = function() {
 var start = new Date().getTime();
 function logtopre(s){
 	  var out = document.getElementById('output');
-	  var eol = document.all ? "<br />" : "";
+	  var eol = /msie/i.test(navigator.userAgent) ? "<br />" : "";
 	  out.innerHTML += s + (!/\n$/.test(s)?"<br />":eol);
 	out.scrollTop=out.scrollHeight;
 }
@@ -204,7 +204,7 @@ function browtest() {
   BrowserLua._pcall(
 	function(){
 	  BrowserLua.doFile("demo.luac");
-	  logtopre("<b>done</b>");
+	  logtopre("<b><i>"+new Date().toUTCString()+" DONE</i></b>");
 	});
   BrowserLua._setoutput(old); // i do a lot of testing from Firebug, so reset
 }
@@ -235,48 +235,62 @@ function dump_G() {
   </head>
   <body>
 	<style type="text/css">
-err { color:#f33; font-weight:bold; }
-body { color:#fff; background-color: #111; font-family: arial; margin:2px;}
+	  err { color:#f33; font-weight:bold; }
+	  body { color:#fff; background-color: #111; font-family: arial; margin:2px;}
 	  table { border-color: #aaa; background-color:#333;-moz-border-radius: 15px;border-radius: 15px; padding:8px; margin: 1px;}
-	  pre { xwhite-space: pre-wrap; margin:0px;padding:0px;overflow-y:scroll;height:100%;;}
-	  td { padding:10px;vertical-align: top; font-size:.9em;font-family:courier; -moz-border-radius: 8px;border-radius:8px;}
+	  pre { white-space: pre-wrap; margin:0px;padding:0px;overflow-y:scroll;height:100%; overflow-x:hidden width:95%;}
+	  td { padding:10px;vertical-align: top; font-size:.9em;font-family:courier; -moz-border-radius: 8px;border-radius:8px; width:100%; overflow-x:hidden;}
 	  iframe { width:100%;height:98%;;background-color:#ccc; }
 	  td.code { background-color:#aaa; }
 	  th { color:#6c6;  -moz-border-radius: 8px;border-radius:8px;
 		   border: solid 1px #444; padding:2px;}
 	  code { border: solid 1px black; padding: 2px; cursor: pointer}
+	  button, input { margin-top: 4px; }
+	  button { background-color: #6cc; 
+	  -moz-border-radius: 8px;border-radius:8px;
+	  border: solid 1px #6aa; font-family: Helvetica;
+	  cursor:pointer; font-size: 14px; padding:3px;
+	  }
+	  input { font-size: .8em; background-color: #ccc; }
+	  a { text-decoration: none; color: #66c; }
 	</style>
-	<div style='height:100%;'>
+	<div style='xheight:100%;'>
 
 	  <table width='50%' align='left'>
-		<tr><td>
-			<div id='commands'>
+		<tr><td style='margin:0;padding:0;height:90px;width:100%;'>
+<div style='float:right;padding-right:87px;'>
+			  <a href="http://github.com/humbletim/ljs">
+				<img style='position:absolute;top:5px;' border="0" src="forkme_small.png" alt="Fork me on GitHub"></a></div>
+
+			<div id='commands' style='padding-left:8px;'>
 			  <button onclick='dump_G();'>dump _G</button>
-			  <button onclick='document.getElementById("output").innerHTML="";'>clear</button>
+			  <button onclick='document.getElementById("output").innerHTML="";'>clear</button><br />
 			  <button onclick='browtest();'>doFile(demo.luac)</button>
-			  <hr />
-			  <input size='16' type='text' value='(top-level arg ...)' 
+			  <input size='10' type='text' value='(arg 1)' 
 				id='arg1' 
 				onfocus='this.onfocus=null;this.value="";'
 				onchange='this.onfucus=null;'
 				/>
-			  <input type='text' size='16' value='(top-level arg 2...)' 
+			  <input type='text' size='10' value='(arg 2)' 
 				id='arg2' 
 				onchange='this.onfocus=null;'
 				onfocus='this.onfocus=null;this.value="";'
 				/>
 			</div>
 		  </td></tr>
-		<tr><th>Lua VM in Javascript</th></tr>
+		<tr><th>Lua VM in Javascript - <a href='http://github.com/humbletim/ljs'>ljs</a></th></tr>
 		  <tr>
-			<td height='300' style='background-color:#555;'>
-			  <pre id='output'></pre>
+			<td height='300' style='background-color:#555;height:300px;'>
+			<div style='float:left;height:300px;overflow-x:hidden;
+			  margin:0;padding:0;width:100%;'>
+			  <pre id='output' style='width:100%;position:relative;height:300px;overflow-y:scroll;'></pre>
+			</div>
 			</td>
 		</tr>
 	  </table>
 
-	  <table width="49%" align='right' height="100%">
-		<tr><td colspan="2" class="code">
+	  <table width="49%" align='right' height="600">
+		<tr><td colspan="2" class="code" width='100%' style='overflow-x:hidden'>
 			<div id='codes' 
 			  onclick="
 			  var lua = ((arguments[0]||[]).target||window.event.srcElement)
@@ -296,14 +310,15 @@ body { color:#fff; background-color: #111; font-family: arial; margin:2px;}
 
 	  <br clear="left" />
 	  <table width='50%' align='left'>
-		<tr><th>expected (output from build host lua) </th></tr>
+		<tr><th>Lua VM in Lua (snapshot) - <a href='http://lua.org'>lua</a></th></tr>
 		<tr>
-		  <td height='300' style='background-color:#aaa'>
+		  <td height='300' style='background-color:#aaa' style='width:95%;overflow-x:hidden'>
 			<iframe style='background-color:#aaa;' border="0" frameborder="0" src="demo.lua.output.html"></iframe>
 		  </td>
 		</tr>
 	  </table>
-
 	</div>
+	<br clear='all' />
+	<center><table><tr><td style='padding:2px;'>copyright &copy; <a href='http://github.com/humbletim/ljs'>http://github.com/humbletim/ljs</a></td></tr></table></center>
   </body>
 </html>

@@ -38,7 +38,7 @@ node-run:
 	luac -o testmodule.out testmodule.lua
 	luac -o testmodule2.out testmodule2.lua
 	luac -o luac.out demo.lua
-	node lvm.js '(top-level arg ...)' '(top-level arg 2...)'
+	node lvm.js '(arg 1)' '(arg 2)'
 
 node-run-quiet:
 	@make -s node-run 2>/dev/null
@@ -48,7 +48,7 @@ run: node-run-quiet
 # this approximates web browser test, using lua
 lua-run:
 	env LUA_PATH=./?.lua lua demo.lua \
-	  '(top-level arg ...)' '(top-level arg 2...)'
+	  '(arg 1)' '(arg 1)'
 
 lua-run-quiet:
 	@make -s lua-run 2>/dev/null
