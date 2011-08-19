@@ -1,0 +1,83 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/
+DTD/xhtml11.dtd">
+<html>
+<style type="text/css">
+background { background: #ffffff; color: #000000; }
+pre.code {
+  font-size: 10pt;
+  font-family: Courier New, Courier, monospace;
+  /* Uncomment this for the Wiki stylesheet:
+  background: #f8f8f8;
+  color: #000000;
+  border: 1px solid black;
+  padding: 0.5em;
+  margin-left: 2em;
+  */
+  white-space: pre-wrap
+}
+span.comment { color: #00a000; }
+span.string { color: #0000c0; }
+span.keyword { color: #a00000; font-weight: bold; }
+span.library { color: #a000a0; }
+body { overflow:hiden; width:90%; margin:0;margin-left:4px; }
+</style>
+<body>
+<pre class="code">
+<span class="library">print</span>(<span class="string">"_VERSION"</span>, _VERSION)
+
+<span class="comment">-- NOTE: this is here temporarily to test require/module support...</span>
+<span class="library">print</span>(<span class="string">'----------- module test -------- '</span>)
+<span class="library">print</span>(<span class="string">'all args'</span>, ...)
+<span class="library">print</span>(<span class="library">require</span><span class="string">'testmodule'</span>.passmex(<span class="string">"x"</span>))
+<span class="library">require</span><span class="string">'testmodule2'</span> <span class="comment">-- note: does module("test") returning 5</span>
+<span class="library">print</span>(<span class="string">"package.loaded.testmodule2 = "</span>, <span class="library">package.loaded</span>.testmodule2)
+<span class="library">print</span>(<span class="string">"test.passme('x') = "</span>,test.passmex(<span class="string">"x"</span>))
+<span class="library">print</span>(<span class="string">'testmodule._NAME:'</span>,<span class="library">require</span><span class="string">'testmodule'</span>._NAME)
+<span class="library">print</span>(<span class="string">'test._NAME:'</span>,test._NAME)
+<span class="keyword">local</span> tmp = ...
+<span class="library">print</span>(<span class="string">'first arg'</span>, tmp)
+<span class="library">print</span>(<span class="string">'----------- /module test -------- \n'</span>)
+<span class="comment">-- /////////////</span>
+
+<span class="comment">-- account.lua</span>
+<span class="comment">-- from PiL 1, Chapter 16</span>
+
+Account = {balance = 0, name = <span class="string">"base"</span>}
+Account.__index = Account;
+
+<span class="keyword">function</span> Account:new (o, name)
+  o = o <span class="keyword">or</span> {name=name}
+  <span class="library">setmetatable</span>(o, self)
+  <span class="keyword">return</span> o
+<span class="keyword">end</span>
+
+<span class="keyword">function</span> Account:deposit (v)
+  self.balance = self.balance + v
+<span class="keyword">end</span>
+
+<span class="keyword">function</span> Account:withdraw (v)
+  <span class="keyword">if</span> v &gt; self.balance <span class="keyword">then</span> <span class="library">error</span>(<span class="string">"insufficient funds on account "</span>..self.name) <span class="keyword">end</span>
+  self.balance = self.balance - v
+<span class="keyword">end</span>
+
+<span class="keyword">function</span> Account:show (title)
+  <span class="library">print</span>(title <span class="keyword">or</span> <span class="string">""</span>, self.name, self.balance)
+<span class="keyword">end</span>
+
+a = Account:new(<span class="keyword">nil</span>,<span class="string">"demo"</span>)
+a:show(<span class="string">"after creation"</span>)
+a:deposit(1000.00)
+a:show(<span class="string">"after deposit"</span>)
+a:withdraw(100.00)
+a:show(<span class="string">"after withdraw"</span>)
+
+<span class="comment">-- this would raise an error</span>
+<span class="comment">--[[
+b = Account:new(nil,"DEMO")
+b:withdraw(100.00)
+--]]</span>
+
+</pre>
+
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/
+DTD/xhtml11.dtd">
+<html>
+<style type="text/css">
+background { background: #ffffff; color: #000000; }
+pre.code {
+  font-size: 10pt;
+  font-family: Courier New, Courier, monospace;
+  /* Uncomment this for the Wiki stylesheet:
+  background: #f8f8f8;
+  color: #000000;
+  border: 1px solid black;
+  padding: 0.5em;
+  margin-left: 2em;
+  */
+  white-space: pre-wrap
+}
+span.comment { color: #00a000; }
+span.string { color: #0000c0; }
+span.keyword { color: #a00000; font-weight: bold; }
+span.library { color: #a000a0; }
+body { overflow:hiden; width:90%; margin:0;margin-left:4px; }
+</style>
+<body>
+<pre class="code">
+<span class="comment">-- test case for require/module support</span>
+<span class="keyword">local</span> <span class="library">assert</span> = <span class="library">assert</span>
+<span class="keyword">local</span> <span class="library">type</span> = <span class="library">type</span>
+<span class="keyword">local</span> random = <span class="library">math.random</span>
+global = <span class="library">_G</span>
+<span class="keyword">local</span> G = <span class="library">_G</span>
+<span class="library">module</span>(...)
+
+<span class="library">assert</span>(<span class="keyword">not</span> global)
+<span class="library">assert</span>(G.type == <span class="library">type</span>)
+<span class="library">assert</span>(<span class="library">string</span> == <span class="keyword">nil</span>)
+<span class="library">assert</span>(<span class="library">table</span> == <span class="keyword">nil</span>)
+<span class="library">assert</span>(<span class="library">_G</span> == <span class="keyword">nil</span>)
+<span class="library">assert</span>(<span class="library">type</span>(random) == <span class="string">'function'</span>)
+<span class="keyword">function</span> _M.passmex(x)
+   <span class="library">assert</span>(x == <span class="string">"x"</span>)
+   <span class="keyword">return</span> _NAME ..<span class="string">":"</span> .. x
+<span class="keyword">end</span>
+<span class="library">assert</span>(_M.passmex)
+<span class="library">assert</span>(passmex)
+<span class="keyword">return</span> _M</pre>
+
+</body>
+</html>
