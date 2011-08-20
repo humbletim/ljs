@@ -7,6 +7,8 @@ originally *ljs-16b833862ae2* from mecurial
   http://code.matthewwild.co.uk/ljs/ :: 
   [16b833862ae2](http://code.matthewwild.co.uk/ljs/rev/16b833862ae2)
 
+DEMO: http://humbletim.github.com/ljs/demo/demo.html
+
 ### roadmap:
 
 1. put together an example of how to go from lua source code to js-encoded
