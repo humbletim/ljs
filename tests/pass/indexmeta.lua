@@ -7,5 +7,5 @@ local t = setmetatable({ name="test" },
 	})
 
 assert(t.metaname == "fromindex")
---assert(#t.tabval == 1, #t.tabval)
+assert(#t.tabval == 1, #t.tabval)
 assert(t.tabval[1] == 1234)

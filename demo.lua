@@ -1,18 +1,11 @@
 print("_VERSION", _VERSION)
+print("#arg", #arg)
+print("arg[1]", arg[1])
+print("...", ...)
+print(string.rep("-", 30))
 
--- NOTE: this is here temporarily to test require/module support...
-print('----------- module test -------- ')
-print('all args', ...)
-print(require'testmodule'.passmex("x"))
-require'testmodule2' -- note: does module("test") returning 5
-print("package.loaded.testmodule2 = ", package.loaded.testmodule2)
-print("test.passme('x') = ",test.passmex("x"))
-print('testmodule._NAME:',require'testmodule'._NAME)
-print('test._NAME:',test._NAME)
-local tmp = ...
-print('first arg', tmp)
-print('----------- /module test -------- \n')
--- /////////////
+local deposit = tonumber(arg[1]) or 1000.00
+local withdraw = tonumber(arg[2]) or 100.00
 
 -- account.lua
 -- from PiL 1, Chapter 16
@@ -41,9 +34,9 @@ end
 
 a = Account:new(nil,"demo")
 a:show("after creation")
-a:deposit(1000.00)
+a:deposit(deposit)--1000.00)
 a:show("after deposit")
-a:withdraw(100.00)
+a:withdraw(withdraw)--100.00)
 a:show("after withdraw")
 
 -- this would raise an error

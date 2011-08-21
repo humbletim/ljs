@@ -3,23 +3,9 @@
 all: demo.html
 
 demo.html: demo.lua.output.html \
-	       	demo.luac.js demo.lua.src.html \
-                 testmodule.luac.js testmodule2.luac.js \
-	             testmodule.lua.src.html testmodule2.lua.src.html
-
-testmodule.luac.js: testmodule.lua
-	luac -o $<c $<
-	lua util/luac2js.lua $<c > $@
-
-testmodule2.luac.js: testmodule2.lua
-	luac -o $<c $<
-	lua util/luac2js.lua $<c > $@
-
-testmodule.lua.src.html: testmodule.lua
-	perl util/lua2html.pl $< > $@
-
-testmodule2.lua.src.html: testmodule2.lua
-	perl util/lua2html.pl $< > $@
+	       	demo.luac.js demo.lua.src.html 
+#                 testmodule.luac.js testmodule2.luac.js \
+#	             testmodule.lua.src.html testmodule2.lua.src.html
 
 demo.luac.js: demo.lua
 	# $< = demo.lua, $@ = demo.luac.js
@@ -30,8 +16,12 @@ demo.lua.output.html: demo.lua
 	( echo "<pre style='font-size:.9em'>" ; make -s lua-run ; \
 	  echo "</pre>" ) > demo.lua.output.html 2>&1 || true
 
+#demo.lua.numbered.html: demo.lua
+#	nl -ba -nrz -w 3 -s "]] " $< |sed -e 's/^/--[[/'  | \
+#	  perl util/lua2html.pl > $@
+
 demo.lua.src.html: demo.lua
-	perl util/lua2html.pl $< > $@
+	  perl util/lua2html.pl $< > $@
 
 # this approximates web browser test, using ndoe
 node-run:
@@ -48,7 +38,7 @@ run: node-run-quiet
 # this approximates web browser test, using lua
 lua-run:
 	env LUA_PATH=./?.lua lua demo.lua \
-	  '(arg 1)' '(arg 1)'
+	  '(arg 1)' '(arg 2)'
 
 lua-run-quiet:
 	@make -s lua-run 2>/dev/null
@@ -79,3 +69,30 @@ clean:
 	rm -vf demo.lua.output.html
 	rm -vf demo.lua.src.html testmodule.lua.src.html testmodule2.lua.src.html
 	rm -vf luac.out testmodule.out testmodule2.out
+
+##### experimenting with yueliang...
+testdump:
+	( cd ../yueliang-0.4.1/orig-5.1.3 && \
+		cat lopcodes.lua ldump.lua \
+	 test/test_ldump.lua ) | sed -e 's/^dofile/--dofile/g' > testdump.lua
+
+modluac:
+	( cd ../yueliang-0.4.1/orig-5.1.3 && \
+	cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua \
+	luac.lua ) | sed -e 's/^dofile/--dofile/g' > modluac.lua
+
+##### experimenting with modules
+testmodule.luac.js: testmodule.lua
+	luac -o $<c $<
+	lua util/luac2js.lua $<c > $@
+
+testmodule2.luac.js: testmodule2.lua
+	luac -o $<c $<
+	lua util/luac2js.lua $<c > $@
+
+testmodule.lua.src.html: testmodule.lua
+	perl util/lua2html.pl $< > $@
+
+testmodule2.lua.src.html: testmodule2.lua
+	perl util/lua2html.pl $< > $@
+

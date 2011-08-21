@@ -9,7 +9,7 @@
 // EXAMPLE node: luac <input.lua> && node lvm.js
 // EXAMPLE browser: see demo.html
 
-var _VERSION = "Lua 5.1(ish) in Javascript"
+var _VERSION = "Lua 5.1  {ljs=0.001}"
 
 // TODO: find a generic javascript logger
 // SEE: demo.html for browser stubs
@@ -100,42 +100,61 @@ LValue.prototype = {
 // 		return 
 // 	  }
 
-		if(this.type == "table")
-		{
-			var val;
-//  TODO: ipairs support, and how to match 0 vs. 1 indexing 
-// 			if (key.type == 'number') {
-// 			  if ((key.value-1) in this.value)
-// 				return this.value[key.value-1];
-// 			}
-			if(key.value in this.value)
-				return this.value[key.value];
-			else if(raw != true && this.metatable && this.metatable.type != "nil")
-			{
-				var __index = this.metatable.index(this.vm.LValue("__index"));
-				if(__index.type == "function")
-				{
-				  // VERIFY: looks like [0] already LValue or undefined...
-				  //     trying it without wrapping in another LValue -t
-				  var ret = /*this.vm.LValue(*/__index.call([this, key])[0] /*)*/;
-				  if (ret) return ret;
-				}
-				else if(__index.type != "nil")
-					return __index.index(key);
-			}
-			return this.vm.LValue(null);
+	  if(this.type == "table") {
+
+		if (0 > "string number nil".indexOf(key.type))
+		  throw "(TODO) ljs.table.index - sorry, table key can't be this type yet:"+key.type;
+
+		// RE: lua tables vs. js Arrays 
+		// in all js it seems non-int gets coerced to strings
+		/*
+		sys=require('sys');
+		t=[]; t[1] = true; t[5.5] = 'fiver'; t[t] = true;
+		sys.debug(sys.inspect(t))
+		sys.debug("t.length:" + t.length);
+		
+		-> DEBUG: [ true, '5.5': 'fiver', ',true': true ]
+		-> DEBUG: t.length:2
+		*/
+
+		// see: updated len() implementation
+		var kv = key.value.toString(); 
+		if(kv in this.value)
+		  return this.value[kv];
+		
+		if(raw != true && this.metatable && this.metatable.type != "nil") {
+		  var __index = this._getMeta("__index");
+		  if(__index.type == "function") {
+			// VERIFY: looks like [0] already LValue or undefined...
+			//     trying it without wrapping in another LValue -t
+			var ret = /*this.vm.LValue(*/__index.call([this, key])[0] /*)*/;
+			if (ret) return ret;
+		  } else if(__index.type != "nil")
+			return __index.index(key);
 		}
-		else
-			throw "Attempt to index a " + this.type + " value";
+		return this.vm.LValue(null);
+	  } else
+		throw "Attempt to index a " + this.type + " value";
 	},
-	setIndex: function (key, value)
+	setIndex: function (key, value, raw)
 	{
-		if(this.type == "table")
-		{
-			this.value[key.value] = value;
+	  if(this.type == "table") {
+		var kv = key.value;
+		if (key.type == 'number') kv = kv.toString();
+		if ( !raw && this.metatable &&  !( kv in this.value)) {
+		  var metamethod = this._getMeta("__newindex");
+		  if (metamethod)
+			return metamethod.call([this,key,value]);
 		}
-		else
-			throw "Attempt to index a " + this.type + " value";
+		// match 0 vs. 1 indexing
+		if (key.type == "number") {
+		  this.value[kv] = value;
+		}
+		else if (key.type != 'string')
+		  throw "(TODO) ljs.table.setIndex: for now indexes must be string or number, not: "+key.type;
+		else this.value[key.value] = value;
+	  } else
+		throw "Attempt to index a " + this.type + " value";
 	},
 	setMetatable: function (metatable)
 	{
@@ -227,8 +246,14 @@ LValue.prototype = {
 		switch(this.type)
 		{
 		case "string":
-		case "table":
-			return this.value.length;
+		return this.value.length;
+		case "table": // FIXME: naive brute-force implementation...
+		var i = 1;
+		while (1) {
+		  if (!this.value[i.toString()])
+			return i-1;
+		  i++;
+		}
 		default:
 			throw "attempt to get length of a "+this.type+" value";
 		}
@@ -432,6 +457,8 @@ function LVM()
 {
 	this.callstack = [];
 	this.stack = [];
+	this.OPS = 0;
+	this.cputime = 0;
 	return this;
 }
 
@@ -451,8 +478,17 @@ LVM.prototype = {
 		case "object":
 			if(value == null)
 				return new LValue(this, "nil", value);
-			else
-				return new LValue(this, "table", value);
+			else {
+			  if (value.length > 0) {
+				sys.debug&&sys.debug("(verify) adapting js array (0 -> 1)");
+				var ml = value.length;
+				for (var i=ml;i>0;i--) { 
+				  value[i.toString()] = value[i-1];
+				}
+				delete value[0];
+			  }
+			  return new LValue(this, "table", value);
+			}
 		case "undefined":
 			return new LValue(this, "nil", null);
 		default:
@@ -478,8 +514,14 @@ LVM.prototype = {
 
 		  if (this.callstack.length == 1 && frame.reg.length > 0) {
 			logOP_VARG("(verify) OP_VARG top-level workaround..."+
-					   frame.reg[0]);
-			this._arg = frame.reg.slice(0);
+					   frame.reg);
+			this._arg = args;
+			logOP_VARG("f.environment.value.arg..."+ 
+					   (f.environment.value.arg||null)+"/"+this._arg.length);
+
+			// note: make a copy, since this will re-index from 0-based to 1-based...
+			frame.f.environment.value.arg = this.LValue(args.slice());
+
 			var ret = this.run(frame);
 			this._arg = null;
 			return ret;
@@ -510,6 +552,7 @@ LVM.prototype = {
 						sys.puts("\t"+i+": "+entry);
 				}
 			}
+			this.OPS++;
 			switch(INS_OPCODE(instruction))
 			{
 			case OP_MOVE:
@@ -563,24 +606,35 @@ LVM.prototype = {
 				break;
 			case OP_VARARG:
 				var A = INS_A(instruction);
+				var wanted = INS_B(instruction)-1;
 				var prevframe = this.callstack[this.callstack.length-2];
 				var base = frame.retAt+frame.f.numParameters;
 
+
 				// FIXME: workaround for top-level varargs (main program)
 				if (!prevframe && 
-					frame.entry == true && 
-					this.callstack.length == 1 &&
-					this._arg
+					frame.entry == true 
+// 					&& this.callstack.length == 1 
+// 					&& this._arg
 				   ) {
-				  logOP_VARG("(verify) OP_VARARG patching top-level main chunk");
-				  prevframe = { reg: this._arg || [] }
-				  base = -1;
+				  logOP_VARG("(verify) OP_VARARG patching top-level main chunk"+ this._arg +"#"+frame.reg.length);
+				  prevframe = { reg: this._arg || [] };
+				  base = -1; 
+				  frame.reg.length = A;
+				}
+
+				if (isNaN(base)) {
+				  //logOP_VARG("(xxx)"+ sys.inspect(this.callstack[0].reg));
+ 				  base = prevframe.reg.length - 2;
+				  logOP_VARG("(verify) wasNaN(base)... now:"+base);
 				}
 
 				var available = (prevframe.reg.length - base) - 1;
-				var wanted = INS_B(instruction)-1;
+
+
 				if (prevframe.reg == this._arg)
-				  logOP_VARG("(verify) OP_VARARGs patched..."+sys.inspect({wanted: wanted, available: available}))
+				  logOP_VARG("(verify) OP_VARARGs patched..."+sys.inspect(
+							   {A:A,wanted: wanted, available: available}))
 				if(wanted < 0)
 				  wanted = available;
 				for(var i = 0; i<wanted; i++)
@@ -904,11 +958,12 @@ function openlibs(testvm) {
 	},
 	print: function ()
 	{
-	  if (arguments.length == 0) throw "print called without arguments";
-	  var args = Array.prototype.slice.call(arguments);
-	  sys.print(args[0].toString());
-	  for(var i = 1; i<args.length; i++)
-		sys.print("\t"+args[i].toString());
+	  if (arguments.length > 0) {
+		var args = Array.prototype.slice.call(arguments);
+		sys.print(args[0].toString());
+		for(var i = 1; i<args.length; i++)
+		  sys.print("\t"+(args[i]||"undefined").toString());
+	  }
 	  sys.print("\n");
 	  return [];
 	},
@@ -932,6 +987,12 @@ function openlibs(testvm) {
 	{
 	  return [this.LValue(o.toString())];
 	},
+	tonumber: function(o)
+	{
+	  var v = (parseFloat(o.value)||null);
+	  //sys.puts("tonumber("+o.value+"/"+o.type+") == "+v+typeof(v));
+	  return [this.LValue(v)];
+	},
 	assert: function (expr, message)
 	{
 	  if(!expr.truth())
@@ -940,7 +1001,25 @@ function openlibs(testvm) {
 		else
 		  throw "assertion failed";
 	  return [expr];
+	},
+	pairs: function(t)
+	{
+	  var curr = 0;
+	  var matches = [];
+	  if (t.type != 'table') 
+		throw "(fixme: match lua error description) pairs  called on non-table: "+t.type;
+	  
+	  for (var p in t.value) {
+		matches.push(p);
+		matches.push(t.value[p]);
+	  }
+	  var iter = function ()
+	  {
+		return [this.LValue(matches[curr++]),matches[curr++]];
+	  };
+	  return [this.LValue(iter)];
 	}
+	  
   };
 
   var math = {
@@ -948,6 +1027,9 @@ function openlibs(testvm) {
 	{
 	  return [this.LValue(m.value*Math.pow(2, e.value))];
 	},
+	xfrexp: function(x) {
+	  return [this.LValue(0),this.LValue(0)];
+	  },
 	floor: function (x)
 	{
 		return [this.LValue(Math.floor(x.value))];
@@ -981,7 +1063,20 @@ function openlibs(testvm) {
 
   var _patternToRegExp = function (patt)
 	{
+
+	  // TODO: generically escape js-regexp tokens freestanding in lua-patterns
+	  //       below only supports single-char examples seen from Yueliang -t
+	  if (patt.length == 1 && /[\[+*?()\\/]/.test(patt)) {
+		patt = "\\"+patt;
+		//sys.puts("(verify) single-char pattern escaped: "+patt);
+	  }
+				
 	  var regexp = "";
+
+	  // not all js supports string indexing...
+	  if (patt.length && patt[0] === undefined)
+		patt = patt.match(/[\s\S]/g);
+
 	  for(var i=0;i<patt.length;i++)
 		{
 		  var c = patt[i];
@@ -1011,38 +1106,55 @@ function openlibs(testvm) {
 			regexp += "\\"; // Escape escapes
 		  regexp += c;
 		}
+	  var old = regexp;
+	  if (patt[0] == '[' && patt.indexOf('%') > 0 ) {// FIXME: only handles "[_%a]" but not ".+[_%a]" !!!!
+		regexp = "["+regexp.substring(1,regexp.length-1).replace(/[\[\]]/g,'')+"]";
+		sys.puts(patt+" :: "+regexp+" (was '"+old+"')")
+	  }
+	  
 	  return new RegExp(regexp, "g");
 	};
 
   var string = {
+	len: function(s) { return [this.LValue(s.len())]; },
+	byte: function(s) { 
+	  var nArgs = arguments.length;
+	  if(nArgs != 1 || s.value.length != 1)
+		throw "ljs.string.byte(): only implemented single-char version...."+s.value.length;
+	  return [this.LValue(String.charCodeAt(s.value,0))];
+	},
 	"char": function ()
 	{
 	  var nArgs = arguments.length;
 	  if(nArgs < 1)
 		throw "string.char(): Expects at least 1 parameter";
-	  var results = [];
+	  var results = "";
 	  for(var i=0; i<nArgs; i++)
 		{
 		  var code = arguments[i];
 		  if(code.type != "number")
 			throw "string.char(): Argument #"+(i+1)+" expected number, got "+code.type;
-		  results.push(String.fromCharCode(code.value));
+		  results = results + String.fromCharCode(code.value);
 		}
-	  return [this.LValue(results.join(''))];
+	  return [this.LValue(results)];
 	},
 	find: function (str, patt, init, plain)
 	{
 	  if(arguments.length > 2)
-		throw "string.find(): No more than the first 2 arguments supported";
+		throw "string.find(): No more than the first 2 arguments supported"+arguments.length;
 	  if (str.type != 'string')
-		throw "bad argument #1 to 'find' (string expected, got "+str.type+")"
+		throw "bad argument #1 to 'find' (string expected, got "+str.type+")";
+	  
 	  var re = _patternToRegExp(patt.value);
 	  var result = re.exec(str);
-	  if(!result)
+	  if(!result) {
+		//		sys.puts(sys.inspect(["string.find", str.value, patt.value, ""+re, start, end]))
 		return [this.LValue(null)];
+	  }
 	  var start = result.index+1;
 	  var end = start + result[0].length - 1;
 	  var ret = [this.LValue(start), this.LValue(end)];
+	  //	  sys.puts(sys.inspect(["string.find", "xxx"+str.value, patt.value, ""+re, start, end]))
 	  for(var i=1; i<result.length; i++)
 		ret.push(this.LValue(result[i]));
 	  return ret;
@@ -1092,11 +1204,21 @@ function openlibs(testvm) {
 		case 1:
 		  throw "string.sub(): Expected 2 or more arguments";
 		case 2:
-		  result = str.value.substring(from.value);
+		  result = str.value.substring(from.value-1);
+		  break
 		case 3:
-		  result = str.value.substring(from.value, to.value);
+		  //sys.puts(sys.inspect(["string.sub",str,from,to]));
+		  result = str.value.substring(from.value-1, to.value);
+		  break
 		}
+	  //	  sys.debug(sys.inspect(["string.sub", str, from, to, result]))
 	  return [this.LValue(result)];
+	},
+	rep: function(str, n) {
+	  var ret = "";
+	  for (var i=0; i < n.value ;i++)
+		ret += str;
+	  return [this.LValue(ret)];
 	}
   };
 
@@ -1117,18 +1239,20 @@ function openlibs(testvm) {
   
   baselib.module = function(name, opt) {
 	modlog("emulating module('"+name+"', "+opt+")");
-	// FIXME: OP_VARARG (...) doesnt seem to work in main chunks
-	//    but... the right data does seems to be there farther upstack
-	if (name.type == 'nil' && this.callstack.length >= 2) {
-	  var vargs = this.callstack[this.callstack.length-2].reg;
-	  var dotdotdotseeall = this.callstack[this.callstack.length-1].reg;
-	  if (dotdotdotseeall.length > 0) {
-		opt = dotdotdotseeall[dotdotdotseeall.length-1];
-		modlogV("(verify) found module(..., XYZ), XYZ="+opt);
+	if (0) { // should be fixed now in OP_VARARG.. ?
+	  // FIXME: OP_VARARG (...) doesnt seem to work in main chunks
+	  //    but... the right data does seems to be there farther upstack
+	  if (name.type == 'nil' && this.callstack.length >= 2) {
+		var vargs = this.callstack[this.callstack.length-2].reg;
+		var dotdotdotseeall = this.callstack[this.callstack.length-1].reg;
+		if (dotdotdotseeall.length > 0) {
+		  opt = dotdotdotseeall[dotdotdotseeall.length-1];
+		  modlogV("(verify) found module(..., XYZ), XYZ="+opt);
+		}
+		name = vargs[vargs.length-1];
+		opt = vargs[vargs.length]||opt;
+		modlogV("(verify) emulated module(...): module('"+name+"', "+opt+")");
 	  }
-	  name = vargs[vargs.length-1];
-	  opt = vargs[vargs.length]||opt;
-	  modlogV("(verify) emulated module(...): module('"+name+"', "+opt+")");
 	}
 
 	if (!name || name.type != 'string') 
@@ -1208,7 +1332,7 @@ function openlibs(testvm) {
 		_M.setIndex(this.LValue("_NAME"), name);
 		//TODO: _M._PACKAGE?
 
-		return [_M];
+		return [loaded];
 	  }
 	}
 	throw "module '"+name+"' not found:\n"+
@@ -1225,6 +1349,26 @@ function openlibs(testvm) {
 	
   testvm.registerLib(_G, null, baselib);
   testvm.registerLib(_G, "math", math);
+  testvm.registerLib(_G, "io", {
+	write: function() {
+						 for (var i=0; i < arguments.length; i++) 
+						   sys.print(arguments[i].toString());
+						 return [];
+					   }
+  });
+
+  testvm.registerLib(_G, "table", {
+	concat: function(t,s) {
+						 if (t.type != 'table') throw "(fixme: match lua error description) table.concat not table:"+t.type;
+						 if (!s || s.type != 'string') throw "(fixme: match lua error description) table.concat not string:"+(s&&s.type);
+						 
+						 var ret = [];
+						 for (var p=1; p <= t.len(); p++) {
+						   ret.push(t.value[p].value);
+						 }
+						 return [this.LValue(ret.join(s.value))];
+					   }
+  });
   testvm.registerLib(_G, "string", string);
   _G.setIndex(testvm.LValue("_G"), _G);
   _G.setIndex(testvm.LValue("_VERSION"), testvm.LValue(_VERSION));
@@ -1233,7 +1377,7 @@ function openlibs(testvm) {
   var mt = testvm.LValue([]);
   mt.setIndex(
 			  testvm.LValue("__index"),
-			  testvm.LValue(function (t, k) { sys.puts("(debug) Access of nil global: "+k); })
+			  testvm.LValue(function (t, k) { (sys.debug||sys.puts)("(debug) Access of nil global: "+k); })
 			  );
   _G.setMetatable(mt);
   return _G;
@@ -1250,10 +1394,10 @@ if (typeof process != 'undefined') { // node
 
 	// ----------------------------------------------------------------------
 	// TODO: could automatically compile .lua to bytecode for node version...
-	var _loadmodule = function(nm) {
-	  sys.debug("_loadmodule..."+this);
+	var _loadmodule = function(nm, M) {
+	  sys.debug("_loadmodule..."+nm+M);
 	  var m = testvm.loadstring(fs.readFileSync(nm+".out", 
-												"binary"), this);
+												"binary"), M);
 	  return m.call([testvm.LValue(nm)])[0];
 	}
 	testvm._setpreload("testmodule", _loadmodule);
@@ -1277,11 +1421,17 @@ if (typeof process != 'undefined') { // node
 	var currframe = trace[0];
 	if(currframe)
 	  {
-		sys.print("lvm.js: "+currframe.sourceName+":"+currframe.line+": ");
+		sys.print("lua(ljs): "+currframe.sourceName+":"+currframe.line+": ");
 	  }
 	sys.puts(e);
 	if(typeof(e) == "object" && "stack" in e)
 	  sys.puts(e.stack);
+	else {
+	  sys.puts("stack traceback:");
+	  trace[trace.length-1].todo = "in main chunk";
+	  for (var i=0; i < trace.length; i++)
+		sys.puts("\t"+trace[i].sourceName+":"+trace[i].line+": "+(trace[i].todo||"<todo>"));
+	}
 	process.exit(1);
   }
  }
