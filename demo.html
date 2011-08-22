@@ -61,6 +61,9 @@ var stubs = {
   // 	  }
 };
 
+// TODO: going to either include this in JS or LUA, not sure yet -t
+stubs['./frexp'] = { frexp: function(x) { alert('frexp missing'); } };
+
 /*javascript: global*/ require = function(it) {
   return (stubs)[it];
 };

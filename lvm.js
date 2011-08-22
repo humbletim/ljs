@@ -103,7 +103,11 @@ LValue.prototype = {
 	  if(this.type == "table") {
 
 		if (0 > "string number nil".indexOf(key.type))
-		  throw "(TODO) ljs.table.index - sorry, table key can't be this type yet:"+key.type;
+		  throw "(TODO) ljs.table.index - sorry"+
+			", table key can't be this type yet:"+key.type;
+
+		// lua allows table[nil] for lookup
+		if (key.type == 'nil') return this.vm.LValue(null); 
 
 		// RE: lua tables vs. js Arrays 
 		// in all js it seems non-int gets coerced to strings
@@ -769,16 +773,23 @@ LVM.prototype = {
 				frame.pc+=(INS_sBx(instruction));
 				var A = INS_A(instruction);
 				frame.reg[A].value -= frame.reg[A+2].value;
+// 				sys.puts(sys.inspect(["OP_FORPREP", frame.reg[A].value, frame.reg[A+2].value]));
 				break;
 			case OP_FORLOOP:
 				var A = INS_A(instruction);
 				var RA = frame.reg[A];
 				RA.value += frame.reg[A+2].value;
-				if(RA.value <= frame.reg[A+1].value)
-				{
+
+				var contd = frame.reg[A+2].value > 0
+				  ? RA.value <= frame.reg[A+1].value
+				  : RA.value >= frame.reg[A+1].value;
+				  
+				//				sys.puts(sys.inspect(["OP_FORLOOP", RA.value, frame.reg[A+2].value, contd]));
+				if(contd)
+				  {
 					frame.pc += INS_sBx(instruction);
 					frame.reg[A+3] = new LValue(this, "number", RA.value);
-				}
+				  }
 				break;
 			case OP_TFORLOOP:
 				var A = INS_A(instruction);
@@ -1027,8 +1038,10 @@ function openlibs(testvm) {
 	{
 	  return [this.LValue(m.value*Math.pow(2, e.value))];
 	},
-	xfrexp: function(x) {
-	  return [this.LValue(0),this.LValue(0)];
+	frexp: function(x) {
+	  var em = require('./frexp').frexp(x.value);
+	  //sys.debug(sys.inspect(["frexp(x)=",em.exponent,em.mantissa]));
+	  return [this.LValue(em.mantissa),this.LValue(em.exponent)];
 	  },
 	floor: function (x)
 	{
@@ -1069,6 +1082,7 @@ function openlibs(testvm) {
 	  if (patt.length == 1 && /[\[+*?()\\/]/.test(patt)) {
 		patt = "\\"+patt;
 		//sys.puts("(verify) single-char pattern escaped: "+patt);
+		return new RegExp(patt,"g");
 	  }
 				
 	  var regexp = "";
@@ -1109,19 +1123,21 @@ function openlibs(testvm) {
 	  var old = regexp;
 	  if (patt[0] == '[' && patt.indexOf('%') > 0 ) {// FIXME: only handles "[_%a]" but not ".+[_%a]" !!!!
 		regexp = "["+regexp.substring(1,regexp.length-1).replace(/[\[\]]/g,'')+"]";
-		sys.puts(patt+" :: "+regexp+" (was '"+old+"')")
+		sys.debug&&sys.debug(patt+" :: "+regexp+" (was '"+old+"')")
 	  }
-	  
 	  return new RegExp(regexp, "g");
 	};
 
   var string = {
 	len: function(s) { return [this.LValue(s.len())]; },
 	byte: function(s) { 
+	  if (s.type != 'string' && s.type != 'number')
+		throw "bad argument #1 to 'byte' (string expected, got "+s.type+")";
+
 	  var nArgs = arguments.length;
-	  if(nArgs != 1 || s.value.length != 1)
-		throw "ljs.string.byte(): only implemented single-char version...."+s.value.length;
-	  return [this.LValue(String.charCodeAt(s.value,0))];
+	  if(nArgs != 1)
+		throw "ljs.string.byte(): only implemented single-char version...."+nArgs;
+	  return [this.LValue(s.value.charCodeAt(0))];
 	},
 	"char": function ()
 	{
@@ -1207,8 +1223,8 @@ function openlibs(testvm) {
 		  result = str.value.substring(from.value-1);
 		  break
 		case 3:
-		  //sys.puts(sys.inspect(["string.sub",str,from,to]));
 		  result = str.value.substring(from.value-1, to.value);
+		  //		  sys.puts(sys.inspect(["string.sub",str.value,from.value,to.value,result,result.length]));
 		  break
 		}
 	  //	  sys.debug(sys.inspect(["string.sub", str, from, to, result]))
@@ -1351,8 +1367,8 @@ function openlibs(testvm) {
   testvm.registerLib(_G, "math", math);
   testvm.registerLib(_G, "io", {
 	write: function() {
-						 for (var i=0; i < arguments.length; i++) 
-						   sys.print(arguments[i].toString());
+						 for (var i=0; i < arguments.length; i++)
+						   sys.print(arguments[i].toString())
 						 return [];
 					   }
   });
@@ -1388,9 +1404,18 @@ function openlibs(testvm) {
 // ...  move this to standalone file!
 if (typeof process != 'undefined') { // node
   var fs=require("fs");
+  //  process.stdout.setEncoding("binary"); // doesn't seem to influence sys.print!
+  sys.print = function(stuff) { process.stdout.write(stuff, 'binary'); };
+	
   try {
 	var testvm = new LVM();
 	var _G = openlibs(testvm);
+
+	testvm.registerLib(_G, "os", {
+	  exit: function(n) {
+						   process.exit(n&&n.value);
+						 }
+	});
 
 	// ----------------------------------------------------------------------
 	// TODO: could automatically compile .lua to bytecode for node version...
@@ -1426,7 +1451,7 @@ if (typeof process != 'undefined') { // node
 	sys.puts(e);
 	if(typeof(e) == "object" && "stack" in e)
 	  sys.puts(e.stack);
-	else {
+	else if (trace.length > 0) {
 	  sys.puts("stack traceback:");
 	  trace[trace.length-1].todo = "in main chunk";
 	  for (var i=0; i < trace.length; i++)
