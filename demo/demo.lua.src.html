@@ -24,20 +24,13 @@ body { overflow:hiden; width:90%; margin:0;padding-left:4px; }
 <body>
 <pre class="code">
 <span class="library">print</span>(<span class="string">"_VERSION"</span>, _VERSION)
+<span class="library">print</span>(<span class="string">"#arg"</span>, #arg)
+<span class="library">print</span>(<span class="string">"arg[1]"</span>, arg[1])
+<span class="library">print</span>(<span class="string">"..."</span>, ...)
+<span class="library">print</span>(<span class="library">string.rep</span>(<span class="string">"-"</span>, 30))
 
-<span class="comment">-- NOTE: this is here temporarily to test require/module support...</span>
-<span class="library">print</span>(<span class="string">'----------- module test -------- '</span>)
-<span class="library">print</span>(<span class="string">'all args'</span>, ...)
-<span class="library">print</span>(<span class="library">require</span><span class="string">'testmodule'</span>.passmex(<span class="string">"x"</span>))
-<span class="library">require</span><span class="string">'testmodule2'</span> <span class="comment">-- note: does module("test") returning 5</span>
-<span class="library">print</span>(<span class="string">"package.loaded.testmodule2 = "</span>, <span class="library">package.loaded</span>.testmodule2)
-<span class="library">print</span>(<span class="string">"test.passme('x') = "</span>,test.passmex(<span class="string">"x"</span>))
-<span class="library">print</span>(<span class="string">'testmodule._NAME:'</span>,<span class="library">require</span><span class="string">'testmodule'</span>._NAME)
-<span class="library">print</span>(<span class="string">'test._NAME:'</span>,test._NAME)
-<span class="keyword">local</span> tmp = ...
-<span class="library">print</span>(<span class="string">'first arg'</span>, tmp)
-<span class="library">print</span>(<span class="string">'----------- /module test -------- \n'</span>)
-<span class="comment">-- /////////////</span>
+<span class="keyword">local</span> deposit = <span class="library">tonumber</span>(arg[1]) <span class="keyword">or</span> 1000.00
+<span class="keyword">local</span> withdraw = <span class="library">tonumber</span>(arg[2]) <span class="keyword">or</span> 100.00
 
 <span class="comment">-- account.lua</span>
 <span class="comment">-- from PiL 1, Chapter 16</span>
@@ -66,9 +59,9 @@ Account.__index = Account;
 
 a = Account:new(<span class="keyword">nil</span>,<span class="string">"demo"</span>)
 a:show(<span class="string">"after creation"</span>)
-a:deposit(1000.00)
+a:deposit(deposit)<span class="comment">--1000.00)</span>
 a:show(<span class="string">"after deposit"</span>)
-a:withdraw(100.00)
+a:withdraw(withdraw)<span class="comment">--100.00)</span>
 a:show(<span class="string">"after withdraw"</span>)
 
 <span class="comment">-- this would raise an error</span>

@@ -31,12 +31,6 @@ var BrowserLua = {
 <!-- ... BrowserLua.provideFile("demo.luac", "<bytecode>") -->
 <script type="text/javascript" src="demo.luac.js"></script>
 
-<!-- ... BrowserLua.provideFile("testmodule.luac", "<bytecode>") -->
-<script type="text/javascript" src="testmodule.luac.js"></script>
-
-<!-- ... BrowserLua.provideFile("testmodule2.luac", "<bytecode>") -->
-<script type="text/javascript" src="testmodule2.luac.js"></script>
-
 <script type="text/javascript">
 
 // TODO: replace remaining node-specific stuff in lvm.js...
@@ -98,38 +92,26 @@ BrowserLua.init = function() {
 		if(currframe) {
 		  sys.print("ljs.BrowserLua._pcall: "+
 					currframe.sourceName+":"+currframe.line+": ");
+
 		} else
 		  sys.print("ljs.BrowserLua._pcall: <no frame>:");
 		sys.puts(e);
+
 		if(typeof(e) == "object" && "stack" in e)
 		  sys.puts(e.stack);
+		else {
+		  sys.puts("stack traceback:");
+		  trace[trace.length-1].todo = "in main chunk";
+		  for (var i=0; i < trace.length; i++)
+			sys.puts("\t"+trace[i].sourceName+":"+trace[i].line+": "+(trace[i].todo||"[todo]"));
+		}
 		//process.exit(1);
+		this.VM.callstack = [];
 	  } catch(e) { alert(e) };
-	  throw e;
+	  //throw e;
 	}
   };
 
-  /* --------------------------------------- */
-  // experimental module support...
-  
-  var _loadmodule = function(NAME, _M) {
-	//	console.warn("_loadmodule", arguments);
-
-	// note: NAME will be require'NAME'
-	var bytecode = BrowserLua._filez[NAME+".luac"];
-	if (!bytecode) throw "no file '"+NAME+".luac"+"'";
-	var m = BrowserLua.VM.loadstring(
-	  bytecode,
-	  _M
-	);
-	var ret = this.vm.call(m, [this.vm.LValue(NAME)]); // calls main chunk
-	//	console.warn("ret:",ret);
-	return ret[0];
-  };
-
-  BrowserLua.VM._setpreload("testmodule", _loadmodule);
-  BrowserLua.VM._setpreload("testmodule2", _loadmodule);
-	
   //== BrowserLua.doFile(path)
   BrowserLua.doFile = function(path) {
 	if (!this._filez[path]) throw "<err>ljs.BrowserLua.doFile on non-provideFile'd: "+path+"</err>";
@@ -141,8 +123,8 @@ BrowserLua.init = function() {
   BrowserLua.doString = function(lua_code) {
 	if (!/^\x1b\x4c\x75\x61\x51\x00/.test(lua_code))
 	  throw "ljs.BrowserLua.doString only handles bytecode (no compiler)";
-	return this._pcall(
-	  function(){
+// 	return this._pcall(
+// 	  function(){
 		var testvm = this.VM;
 		var _G = this._G;
 		
@@ -157,8 +139,8 @@ BrowserLua.init = function() {
 		var ret = testvm.call(f, arg);
 		if(ret.length)
 		  sys.puts("ljs Returned: "+sys.inspect(ret));
-	  }
-	);
+// 	  }
+// 	);
   };
 
   //== BrowserLua.callLua(functionName, args, ...) --> array of return values
@@ -191,20 +173,26 @@ BrowserLua.init = function() {
 <script type="text/javascript">
 
 var start = new Date().getTime();
-function logtopre(s){
-	  var out = document.getElementById('output');
-	  var eol = /msie/i.test(navigator.userAgent) ? "<br />" : "";
-	  out.innerHTML += s + (!/\n$/.test(s)?"<br />":eol);
-	out.scrollTop=out.scrollHeight;
+function clearoutput() { 
+  var out = document.getElementById('output');
+  out.scrollTop=0;
+  out.innerHTML = "";
+}
+
+function domoutput(s){
+  var out = document.getElementById('output');
+  var eol = /msie/i.test(navigator.userAgent) ? "<br />" : "";
+  out.innerHTML += s + (!/\n$/.test(s)?"<br />":eol);
+  out.scrollTop=out.scrollHeight-out.clientHeight;
 }
 
 // run the test bytecode
 function browtest() {
-  var old = BrowserLua._setoutput(logtopre);
+  var old = BrowserLua._setoutput(domoutput);
   BrowserLua._pcall(
 	function(){
 	  BrowserLua.doFile("demo.luac");
-	  logtopre("<b><i>"+new Date().toUTCString()+" DONE</i></b>");
+	  domoutput("<b><i>"+new Date().toUTCString()+" DONE</i></b>");
 	});
   BrowserLua._setoutput(old); // i do a lot of testing from Firebug, so reset
 }
@@ -216,18 +204,18 @@ window.onload = function() {
 
 function dump_G() {
   // FIXME: expose some API for this rather than deep-diving into lvm..
-  logtopre("----------------");
-  logtopre("dumping _G");
-  logtopre("----------------");
+  domoutput("----------------");
+  domoutput("dumping _G");
+  domoutput("----------------");
   for (var p in BrowserLua._G.value)
-	logtopre(p+"\t"+ BrowserLua._getglobal(p).type);
+	domoutput(p+"\t"+ BrowserLua._getglobal(p).type);
 
-  logtopre("----------------");
-  logtopre("dumping _G.package.loaded");
-  logtopre("----------------");
-  var loaded =  BrowserLua._G.value.package.value.loaded.value;
-  for (var p in loaded)
-	logtopre(p+"\t"+ loaded[p].type);
+//   domoutput("----------------");
+//   domoutput("dumping _G.package.loaded");
+//   domoutput("----------------");
+//   var loaded =  BrowserLua._G.value.package.value.loaded.value;
+//   for (var p in loaded)
+// 	domoutput(p+"\t"+ loaded[p].type);
 
 }
 
@@ -238,9 +226,9 @@ function dump_G() {
 	  err { color:#f33; font-weight:bold; }
 	  body { color:#fff; background-color: #111; font-family: arial; margin:2px;}
 	  table { border-color: #aaa; background-color:#333;-moz-border-radius: 15px;border-radius: 15px; padding:8px; margin: 1px;}
-	  pre { white-space: pre-wrap; margin:0px;padding:0px;overflow-y:scroll;height:100%; overflow-x:hidden width:95%;}
-	  td { padding:10px;vertical-align: top; font-size:.9em;font-family:courier; -moz-border-radius: 8px;border-radius:8px; width:100%; overflow-x:hidden;}
-	  iframe { width:100%;height:98%;;background-color:#ccc; }
+#output { overflow:auto; width:100%;margin:0px;padding:0px;overflow-y:scroll;height:100%; font-family:monospace;}
+	  td { padding:10px;vertical-align: top; font-size:.9em;font-family:monospace; -moz-border-radius: 8px;border-radius:8px; width:100%; overflow-x:hidden;}
+	  iframe { width:100%;height:98%;background-color:#ccc; }
 	  td.code { background-color:#aaa; }
 	  th { color:#6c6;  -moz-border-radius: 8px;border-radius:8px;
 		   border: solid 1px #444; padding:2px;}
@@ -262,16 +250,16 @@ function dump_G() {
 			  <a href="http://github.com/humbletim/ljs">
 				<img style='position:absolute;top:5px;' border="0" src="forkme_small.png" alt="Fork me on GitHub"></a></div>
 
-			<div id='commands' style='padding-left:8px;'>
+			<div id='commands' style='padding-left:8px;' onkeyup='if (13 == ((arguments[0]||[]).keyCode||window.event.keyCode)) { clearoutput();browtest(); }'>
 			  <button onclick='dump_G();'>dump _G</button>
-			  <button onclick='document.getElementById("output").innerHTML="";'>clear</button><br />
+			  <button onclick='clearoutput();'>clear</button><br />
 			  <button onclick='browtest();'>doFile(demo.luac)</button>
-			  <input size='10' type='text' value='(arg 1)' 
+			  <input tabindex="1" size='10' type='text' value='(arg 1)' 
 				id='arg1' 
 				onfocus='this.onfocus=null;this.value="";'
 				onchange='this.onfucus=null;'
 				/>
-			  <input type='text' size='10' value='(arg 2)' 
+			  <input tabindex="2" type='text' size='10' value='(arg 2)' 
 				id='arg2' 
 				onchange='this.onfocus=null;'
 				onfocus='this.onfocus=null;this.value="";'
@@ -280,12 +268,13 @@ function dump_G() {
 		  </td></tr>
 		<tr><th>Lua VM in Javascript - <a href='http://github.com/humbletim/ljs'>ljs</a></th></tr>
 		  <tr>
-			<td height='300' style='background-color:#555;height:300px;'>
-			<div style='float:left;height:300px;overflow-x:hidden;
-			  margin:0;padding:0;width:100%;'>
-			  <pre id='output' style='width:100%;position:relative;height:300px;overflow-y:scroll;'></pre>
+			<td height='300' style='background-color:#555;width:100%;'>
+			<div style='margin:0;padding:0;position:relative;width:100%;height:100%;'>
+			  <div style='margin:0;padding:0;position:absolute;width:100%;height:100%;'>
+				<pre id='output'></pre>
+			  </div>
 			</div>
-			</td>
+		  </td>
 		</tr>
 	  </table>
 
@@ -301,8 +290,6 @@ function dump_G() {
 			  /*else document.location.hash = 'codes';*/
 			  ">
 			  <code>demo.lua</code>
-			  <code>testmodule.lua</code>
-			  <code>testmodule2.lua</code>
 			</div>
 			<iframe id='demo.lua' src="demo.lua.src.html"></iframe>
 		  </td></tr>
