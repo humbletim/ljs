@@ -61,19 +61,25 @@ var stubs = {
   // 	  }
 };
 
-// TODO: going to either include this in JS or LUA, not sure yet -t
-stubs['./frexp'] = { frexp: function(x) { alert('frexp missing'); } };
-
 /*javascript: global*/ require = function(it) {
   return (stubs)[it];
 };
 // -- /NODE --
 </script>
 
+<!-- frexp.js (still haven't decided where to/if to inline this somewhere 
+<script type="text/javascript" src="misc/frexp.js"></script>
+-->
+
 <!-- Lua VM -->
 <script type="text/javascript" src="lvm.js"></script>
 
 <script type="text/javascript">
+
+stubs['./misc/frexp'] = { frexp: window.frexp ||
+						  function(x) { return alert('frexp missing'); } };
+
+
 
 //== -- BROWSERLUA --
 

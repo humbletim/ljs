@@ -9,7 +9,7 @@
 // EXAMPLE node: luac <input.lua> && node lvm.js
 // EXAMPLE browser: see demo.html
 
-var _VERSION = "Lua 5.1  {ljs=0.001}"
+var _VERSION = "Lua 5.1  {ljs=0.0010}"
 
 // TODO: find a generic javascript logger
 // SEE: demo.html for browser stubs
@@ -122,10 +122,15 @@ LValue.prototype = {
 		*/
 
 		// see: updated len() implementation
-		var kv = key.value.toString(); 
-		if(kv in this.value)
+		var kv = key.value.toString();
+
+		// .hasOwnProperty so "concat" doesn't pick up javascript:[].concat
+		if((!this.value.hasOwnProperty && kv in this.value) ||
+		   this.value.hasOwnProperty(kv)) {
+		  if (typeof(this.value[kv]) == 'function')
+			throw  "javascript key issue..."+kv+"="+typeof(this.value[kv]);
 		  return this.value[kv];
-		
+		}
 		if(raw != true && this.metatable && this.metatable.type != "nil") {
 		  var __index = this._getMeta("__index");
 		  if(__index.type == "function") {
@@ -145,7 +150,10 @@ LValue.prototype = {
 	  if(this.type == "table") {
 		var kv = key.value;
 		if (key.type == 'number') kv = kv.toString();
-		if ( !raw && this.metatable &&  !( kv in this.value)) {
+		if ( !raw && this.metatable &&  !(
+			   (!this.value.hasOwnProperty && kv in this.value) ||
+			   this.value.hasOwnProperty(kv)
+			 )) {
 		  var metamethod = this._getMeta("__newindex");
 		  if (metamethod)
 			return metamethod.call([this,key,value]);
@@ -524,7 +532,10 @@ LVM.prototype = {
 					   (f.environment.value.arg||null)+"/"+this._arg.length);
 
 			// note: make a copy, since this will re-index from 0-based to 1-based...
-			frame.f.environment.value.arg = this.LValue(args.slice());
+			frame.f.environment.setIndex(
+			  this.LValue("arg"),
+			  this.LValue(args.slice(0))
+			);
 
 			var ret = this.run(frame);
 			this._arg = null;
@@ -573,9 +584,9 @@ LVM.prototype = {
 				break;
 			case OP_GETUPVAL:
 				var upvalue = frame.f.upvalues[INS_B(instruction)];
-				// FIXME: not sure why this was previously copying the upvalue?
-				//  (.metatable is lost taht way, so trying direct ref...) -t
-				frame.reg[INS_A(instruction)] = upvalue;//new LValue(this, upvalue.type, upvalue.value);
+				frame.reg[INS_A(instruction)] = new LValue(this, upvalue.type, upvalue.value);
+ 				if (upvalue.metatable)
+ 				  frame.reg[INS_A(instruction)].metatable = upvalue.metatable;
 				break;
 			case OP_GETGLOBAL:
 				var name = frame.f.constants[INS_Bx(instruction)];
@@ -586,6 +597,7 @@ LVM.prototype = {
 				var upvalue = frame.f.upvalues[INS_B(instruction)];
 				upvalue.type = reg.type;
 				upvalue.value = reg.value;
+				upvalue.metatable = reg.metatable;
 				break;
 			case OP_SETGLOBAL:
 				var name = frame.f.constants[INS_Bx(instruction)];
@@ -593,6 +605,7 @@ LVM.prototype = {
 				break;
 			case OP_LOADK:
 				var constant = frame.f.constants[INS_Bx(instruction)];
+				if (constant.metatable) throw "OP_LOADK: FIXME: metatable support?";
 				frame.reg[INS_A(instruction)] = new LValue(this, constant.type, constant.value);
 				break;
 			case OP_NEWTABLE:
@@ -602,6 +615,8 @@ LVM.prototype = {
 				var C = INS_C(instruction);
 				var value = frame.reg[INS_B(instruction)].index(RK(frame, C));
 				frame.reg[INS_A(instruction)] = new LValue(this, value.type, value.value);
+				if (value.metatable)
+				  frame.reg[INS_A(instruction)].metatable = value.metatable;
 				break;
 			case OP_SETTABLE:
 				var C = INS_C(instruction);
@@ -1006,7 +1021,7 @@ function openlibs(testvm) {
 	},
 	assert: function (expr, message)
 	{
-	  if(!expr.truth())
+	  if(!expr || !expr.truth())
 		if(message && message.truth())
 		  throw message;
 		else
@@ -1039,7 +1054,7 @@ function openlibs(testvm) {
 	  return [this.LValue(m.value*Math.pow(2, e.value))];
 	},
 	frexp: function(x) {
-	  var em = require('./frexp').frexp(x.value);
+	  var em = require('./misc/frexp').frexp(x.value);
 	  //sys.debug(sys.inspect(["frexp(x)=",em.exponent,em.mantissa]));
 	  return [this.LValue(em.mantissa),this.LValue(em.exponent)];
 	  },
@@ -1054,9 +1069,13 @@ function openlibs(testvm) {
 	random: function ()
 	{
 	  if(arguments.length!=0)
-		throw "math.random arguments not implemente";
+		throw "math.random arguments not implemented";
 
 		return [this.LValue(Math.random())];
+	},
+	abs: function(x)
+	{
+	  return [this.LValue(Math.abs(x.value))];
 	}
   };
 
@@ -1123,7 +1142,7 @@ function openlibs(testvm) {
 	  var old = regexp;
 	  if (patt[0] == '[' && patt.indexOf('%') > 0 ) {// FIXME: only handles "[_%a]" but not ".+[_%a]" !!!!
 		regexp = "["+regexp.substring(1,regexp.length-1).replace(/[\[\]]/g,'')+"]";
-		sys.debug&&sys.debug(patt+" :: "+regexp+" (was '"+old+"')")
+		//sys.debug&&sys.debug(patt+" :: "+regexp+" (was '"+old+"')")
 	  }
 	  return new RegExp(regexp, "g");
 	};
@@ -1156,21 +1175,37 @@ function openlibs(testvm) {
 	},
 	find: function (str, patt, init, plain)
 	{
-	  if(arguments.length > 2)
-		throw "string.find(): No more than the first 2 arguments supported"+arguments.length;
 	  if (str.type != 'string')
 		throw "bad argument #1 to 'find' (string expected, got "+str.type+")";
+
+	  var isplain = plain && plain.truth();
+	  var tstr = str.value;
+
+// 	  if(arguments.length > 2)
+// 		throw "string.find(): No more than the first 2 arguments supported"+arguments.length;
 	  
-	  var re = _patternToRegExp(patt.value);
-	  var result = re.exec(str);
+	  var offset = (init && init.type == 'number' ? init.value : 1) -1;
+ 	  if (offset > 1) {
+		tstr = tstr.substring(offset);
+		// 		sys.puts(sys.inspect(["offseted string.find", tstr]));
+ 	  }
+		
+	  var ret;
+	  if (isplain) {
+		re = new RegExp(patt.value.replace(/([\S\s])/g,'\\$1'), "g");
+		//sys.puts("(verify) string.find... plain mode!"+re);
+	  } else {
+		re = _patternToRegExp(patt.value);
+	  }
+	  var result = re.exec(tstr);
 	  if(!result) {
 		//		sys.puts(sys.inspect(["string.find", str.value, patt.value, ""+re, start, end]))
 		return [this.LValue(null)];
 	  }
-	  var start = result.index+1;
+	  var start = result.index+1 + offset;
 	  var end = start + result[0].length - 1;
 	  var ret = [this.LValue(start), this.LValue(end)];
-	  //	  sys.puts(sys.inspect(["string.find", "xxx"+str.value, patt.value, ""+re, start, end]))
+	  //sys.puts(sys.inspect(["string.find", patt.value, ""+re, start, end]))
 	  for(var i=1; i<result.length; i++)
 		ret.push(this.LValue(result[i]));
 	  return ret;
@@ -1220,11 +1255,15 @@ function openlibs(testvm) {
 		case 1:
 		  throw "string.sub(): Expected 2 or more arguments";
 		case 2:
-		  result = str.value.substring(from.value-1);
+		  result = str.value.substring(
+			from.value < 0 ? str.value.length + from.value : from.value-1);
+		  //sys.puts(sys.inspect(["string.sub",str.value,from.value,result]))
 		  break
 		case 3:
-		  result = str.value.substring(from.value-1, to.value);
-		  //		  sys.puts(sys.inspect(["string.sub",str.value,from.value,to.value,result,result.length]));
+		  result = str.value.substring(
+			from.value < 0 ? str.value.length + from.value : from.value-1,
+			to.value < 0 ? str.value.length + to.value + 1 : to.value);
+		  //sys.puts(sys.inspect(["string.sub",str.value,from.value,to.value,result,result.length]));
 		  break
 		}
 	  //	  sys.debug(sys.inspect(["string.sub", str, from, to, result]))
@@ -1366,6 +1405,10 @@ function openlibs(testvm) {
   testvm.registerLib(_G, null, baselib);
   testvm.registerLib(_G, "math", math);
   testvm.registerLib(_G, "io", {
+	open: function() { 
+						 throw "io.open -- not available";
+						 
+					   } ,
 	write: function() {
 						 for (var i=0; i < arguments.length; i++)
 						   sys.print(arguments[i].toString())
@@ -1416,6 +1459,30 @@ if (typeof process != 'undefined') { // node
 						   process.exit(n&&n.value);
 						 }
 	});
+	// FIXME: there's a better way
+	_G.value.io.setIndex(
+	  testvm.LValue("open"),
+	  testvm.LValue(
+		function(x) {
+		  //sys.puts("io.open"+x)
+		  // FIXME: insecure, should formally sandbox even for testing
+		  if (x.type != "string" || !/^tests\/pass\//.test(x.value))
+			throw "io.open dummy imp -- unexpected: "+x;
+		  var ret = this.LValue([]);
+		  ret.setIndex(this.LValue("read"),
+					   this.LValue(
+						 function(self,a) {
+						   if (self != ret) 
+							 throw "convoluted closure not working";
+						   if (a.value != "*all")
+							 throw "io.open.read dummy imp... unexpected: "+a.value;
+						   var lua = fs.readFileSync(x.value, "binary");
+						   sys.debug("io.open.read.*all "+x.value+"=="+lua.length);
+						   return [this.LValue(lua)];
+						 }));
+		  return [ret];
+		})
+	);
 
 	// ----------------------------------------------------------------------
 	// TODO: could automatically compile .lua to bytecode for node version...

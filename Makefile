@@ -76,10 +76,10 @@ testdump:
 		cat lopcodes.lua ldump.lua \
 	 test/test_ldump.lua ) | sed -e 's/^dofile/--dofile/g' > testdump.lua
 
-modluac:
-	( cd ../yueliang-0.4.1/orig-5.1.3 && \
-	cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua \
-	luac.lua ) | sed -e 's/^dofile/--dofile/g' > modluac.lua
+modluac: misc/yluac.lua
+	( ( cd ../yueliang-0.4.1/orig-5.1.3 && \
+	cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua ) ; \
+	cat misc/yluac.lua ) | sed -e 's/^dofile/--dofile/g' > modluac.lua
 
 ##### experimenting with modules
 testmodule.luac.js: testmodule.lua
