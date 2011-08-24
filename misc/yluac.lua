@@ -1,5 +1,5 @@
 -- this is baked into modluac.lua for yueliang testing
-
+--DEBUG=true
 if DEBUG then
    local _luaK = luaK
    
@@ -10,6 +10,7 @@ if DEBUG then
 									 return _luaK[k]
 								  end
 					   })
+
 end
    
 
@@ -23,10 +24,6 @@ end
 assert(ret == "1:1|2:a|3:3|", ret)
 print(ret)
 ]] 
---[=[
-or 
-io.open and io.open("tests/pass/pairs.lua","rb"):read("*all") 
-]=]
 
 -- make modluac && luac modluac.lua && node lvm.js | lua
 working = [[
@@ -35,9 +32,10 @@ working = [[
    print("hi:"..t.name)
 ]]
 
-lua = working
+assert(arg and arg[1], "usage: node lvm.js <luafile>...")
+lua = io.open and io.open(arg[1],"rb"):read("*all") 
 local zio = luaZ:init(luaZ:make_getS(lua), nil)
-local func = luaY:parser({}, zio, nil, "@yluac")
+local func = luaY:parser({}, zio, nil, arg and "@"..arg[1] or "@yluacx")
 local writer, buff = luaU:make_setS()
 luaU:dump({}, func, writer, buff)
 io.write(buff.data)

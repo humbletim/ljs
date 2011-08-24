@@ -80,6 +80,13 @@ modluac: misc/yluac.lua
 	( ( cd ../yueliang-0.4.1/orig-5.1.3 && \
 	cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua ) ; \
 	cat misc/yluac.lua ) | sed -e 's/^dofile/--dofile/g' > modluac.lua
+	luac modluac.lua
+
+ytest: modluac
+	bash -c 'for x in tests/pass/*.lua ; do \
+		  node lvm.js $$x 2>/dev/null > $$x.yluac || ( echo "FAIL(compile): $$x" && cat $$x.yluac && rm $$x.yluac ) ; \
+		   [ -e $$x.yluac ] && ( lua $$x.yluac 2>/dev/null >/dev/null || echo "FAIL(lua): $$x" && rm $$x.yluac ) ; \
+	done'
 
 ##### experimenting with modules
 testmodule.luac.js: testmodule.lua

@@ -1019,7 +1019,9 @@ function openlibs(testvm) {
 	},
 	tonumber: function(o)
 	{
-	  var v = (parseFloat(o.value)||null);
+	  var v = parseFloat(o.value);
+	  if (isNaN(v))
+		v = null;
 	  //sys.puts("tonumber("+o.value+"/"+o.type+") == "+v+typeof(v));
 	  return [this.LValue(v)];
 	},
@@ -1278,6 +1280,12 @@ function openlibs(testvm) {
 	  for (var i=0; i < n.value ;i++)
 		ret += str;
 	  return [this.LValue(ret)];
+	},
+	lower: function(s) {
+	  s = s || { type:'no value' };
+	  if (s.type != 'string' && s.type != 'number')
+		throw "bad argument #1 to 'lower' (string expected, got "+s.type+")";
+	  return [this.LValue(s.toString().toLowerCase())]
 	}
   };
 
@@ -1507,7 +1515,7 @@ if (typeof process != 'undefined') { // node
 	for (var i=2; /* +2 bc [0] is process name [1] is script name*/
 		 i < process.argv.length; i++)
 	  arg.push(testvm.LValue(process.argv[i]));
-
+	
 	var ret = testvm.call(f, arg);
 	if(ret)
 	  sys.debug("Returned: "+sys.inspect(ret));
@@ -1517,9 +1525,9 @@ if (typeof process != 'undefined') { // node
 	var currframe = trace[0];
 	if(currframe)
 	  {
-		sys.print("lua(ljs): "+currframe.sourceName+":"+currframe.line+": ");
-	  }
-	sys.puts(e);
+		sys.puts("lua(ljs): "+currframe.sourceName+":"+currframe.line+": "+e);
+	  } else
+	  sys.puts(e);
 	if(typeof(e) == "object" && "stack" in e)
 	  sys.puts(e.stack);
 	else if (trace.length > 0) {
@@ -1550,7 +1558,7 @@ if (typeof process != 'undefined') { // node
 		}
 		sys.puts("\t"+trace[i].sourceName+":"+trace[i].line+": "+(trace[i].context||"<todo>"));
 
-		if (i == 0) //trace[i].actualSourceLine)
+		if (i == 0 || trace[i].actualSourceLine && process.argv[2] == '-v')
 		  sys.debug("(sourceline)\t"+trace[i].actualSourceLine);
 	  }
 	}
