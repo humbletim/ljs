@@ -9,7 +9,7 @@
 // EXAMPLE node: luac <input.lua> && node lvm.js
 // EXAMPLE browser: see demo.html
 
-var _VERSION = "Lua 5.1  {ljs=0.0010}"
+var _VERSION = "Lua 5.1  {ljs=0.0011}"
 
 // TODO: find a generic javascript logger
 // SEE: demo.html for browser stubs
@@ -787,6 +787,10 @@ LVM.prototype = {
 			case OP_FORPREP:
 				frame.pc+=(INS_sBx(instruction));
 				var A = INS_A(instruction);
+				
+				// make a copy of initializer ('x' in lua: for i=x,0,-1)
+				frame.reg[A] = new LValue(this, "number", frame.reg[A].value);
+
 				frame.reg[A].value -= frame.reg[A+2].value;
 // 				sys.puts(sys.inspect(["OP_FORPREP", frame.reg[A].value, frame.reg[A+2].value]));
 				break;
@@ -1519,10 +1523,36 @@ if (typeof process != 'undefined') { // node
 	if(typeof(e) == "object" && "stack" in e)
 	  sys.puts(e.stack);
 	else if (trace.length > 0) {
+	  var lines = [];
+	  try {
+		lines = (fs.readFileSync(trace[0].sourceName, "binary")).split(/\n/);
+	  } catch(e) { 
+		sys.debug("ljs.node: was going to inspect lua source, but:" +e);
+	  }
 	  sys.puts("stack traceback:");
-	  trace[trace.length-1].todo = "in main chunk";
-	  for (var i=0; i < trace.length; i++)
-		sys.puts("\t"+trace[i].sourceName+":"+trace[i].line+": "+(trace[i].todo||"<todo>"));
+	  trace[trace.length-1].context = "in main chunk";
+	  for (var i=0; i < trace.length; i++) {
+		if (lines.length) {
+		  // naive function name deduction...
+		  trace[i].actualSourceLine = lines[trace[i].line-1];
+		  if (!trace[i].context) {
+			for (var l=0; l < 100 && trace[i].line-1-l >= 0; l++) {
+			  var upline = lines[trace[i].line-1-l];
+			  var arr = upline.match(
+				/function ([\w:]+)?/
+			  ) || upline.match(/([\w:]+)\s*=\s*function/);
+			  if (arr) {
+				trace[i].context = "perhaps in function '"+(arr[1]||arr[2])+"'";
+				break;
+			  }
+			}
+		  }
+		}
+		sys.puts("\t"+trace[i].sourceName+":"+trace[i].line+": "+(trace[i].context||"<todo>"));
+
+		if (i == 0) //trace[i].actualSourceLine)
+		  sys.debug("(sourceline)\t"+trace[i].actualSourceLine);
+	  }
 	}
 	process.exit(1);
   }
