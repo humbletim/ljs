@@ -4,6 +4,10 @@ print("arg[1]", arg[1])
 print("...", ...)
 print(string.rep("-", 30))
 
+if package.loaded.yueliang then 
+   print("yueliang", loadstring(yueliang.compilestring("return 5+5"))())
+end
+
 local deposit = tonumber(arg[1]) or 1000.00
 local withdraw = tonumber(arg[2]) or 100.00
 

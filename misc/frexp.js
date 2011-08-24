@@ -9,7 +9,7 @@
   var System = { out: { println: function(x) { console.info(x); } } };
   var Double = {
 	isNaN: isNaN,
-	isInfinite: function(x) { return x == Infinity || x == -Infinity; },
+	isInfinite: function(x) { return x == Infinity || x == -Infinity; }
   };
   // --
 

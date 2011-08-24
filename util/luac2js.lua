@@ -3,7 +3,7 @@
 -- TODO: accept wrapper template (BrowserLua, etc.) as arg...
 
 local bc = assert(io.open(arg[1], "rb")):read("*all")
-local wrap = 80-5
+local wrap = math.huge --80-5
 
 io.write('/* luac2js '..arg[1]..' @ '..os.date()..' */\n');
 

@@ -1050,8 +1050,12 @@ function openlibs(testvm) {
 		return [this.LValue(matches[curr++]),matches[curr++]];
 	  };
 	  return [this.LValue(iter)];
+	},
+	loadstring: function(chunk) {
+	  if (!/^\x1b\x4c\x75\x61\x51\x00/.test(chunk.value))
+		throw "ljs.loadstring only handles bytecode (no compiler)";
+	  return [this.loadstring(chunk.value, this.LValue([]))];
 	}
-	  
   };
 
   var math = {
@@ -1111,7 +1115,7 @@ function openlibs(testvm) {
 	  }
 				
 	  var regexp = "";
-
+	  var original = patt;
 	  // not all js supports string indexing...
 	  if (patt.length && patt[0] === undefined)
 		patt = patt.match(/[\s\S]/g);
@@ -1146,10 +1150,11 @@ function openlibs(testvm) {
 		  regexp += c;
 		}
 	  var old = regexp;
-	  if (patt[0] == '[' && patt.indexOf('%') > 0 ) {// FIXME: only handles "[_%a]" but not ".+[_%a]" !!!!
+	  if (patt[0] == '[' && original.indexOf('%') > 0 ) {// FIXME: only handles "[_%a]" but not ".+[_%a]" !!!!
 		regexp = "["+regexp.substring(1,regexp.length-1).replace(/[\[\]]/g,'')+"]";
 		//sys.debug&&sys.debug(patt+" :: "+regexp+" (was '"+old+"')")
 	  }
+
 	  return new RegExp(regexp, "g");
 	};
 
@@ -1500,13 +1505,16 @@ if (typeof process != 'undefined') { // node
 	// TODO: could automatically compile .lua to bytecode for node version...
 	var _loadmodule = function(nm, M) {
 	  sys.debug("_loadmodule..."+nm+M);
-	  var m = testvm.loadstring(fs.readFileSync(nm+".out", 
+	  var m = testvm.loadstring(fs.readFileSync(nm+".luac", 
 												"binary"), M);
 	  return m.call([testvm.LValue(nm)])[0];
 	}
-	testvm._setpreload("testmodule", _loadmodule);
-	testvm._setpreload("testmodule2", _loadmodule);
 	// -----------------------------------
+
+	if (0) {
+	  testvm._setpreload("yueliang", _loadmodule);
+	  _G.value.require.call([testvm.LValue("yueliang")]);
+	}
 
 	var f = testvm.loadstring(fs.readFileSync("luac.out", "binary"), _G);
 
@@ -1516,6 +1524,9 @@ if (typeof process != 'undefined') { // node
 		 i < process.argv.length; i++)
 	  arg.push(testvm.LValue(process.argv[i]));
 	
+	// FIXME: separate _G.arg from module(...) vararg magic (see ._arg above)
+	if (arg.length == 0)
+	  _G.setIndex(testvm.LValue("arg"), testvm.LValue([]));
 	var ret = testvm.call(f, arg);
 	if(ret)
 	  sys.debug("Returned: "+sys.inspect(ret));

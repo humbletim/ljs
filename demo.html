@@ -67,7 +67,10 @@ var stubs = {
 // -- /NODE --
 </script>
 
-<!-- frexp.js (still haven't decided where to/if to inline this somewhere 
+<!-- ... BrowserLua.provideFile("yueliang.luac", "<bytecode>") 
+<script type="text/javascript" src="yueliang.luac.js"></script>
+-->
+<!-- frexp.js (still haven't decided where to/if to inline this somewhere) 
 <script type="text/javascript" src="misc/frexp.js"></script>
 -->
 
@@ -88,6 +91,23 @@ BrowserLua.init = function() {
 
   BrowserLua.VM = new LVM();
   BrowserLua._G = openlibs(BrowserLua.VM);
+
+  BrowserLua._loadmodule = function(NAME, _M) {
+	//	console.warn("_loadmodule", arguments);
+
+	// note: NAME will be require'NAME'
+	var bytecode = BrowserLua._filez[NAME+".luac"];
+	if (!bytecode) throw "no file '"+NAME+".luac"+"'";
+	var m = BrowserLua.VM.loadstring(
+	  bytecode,
+	  _M
+	);
+	var ret = this.vm.call(m, [this.vm.LValue(NAME)]); // calls main chunk
+	//	console.warn("ret:",ret);
+	return ret[0];
+  };
+
+  BrowserLua.VM._setpreload("yueliang", BrowserLua._loadmodule);
 
   // hmmm
   BrowserLua._pcall = function(jsfunc) {

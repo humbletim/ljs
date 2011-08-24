@@ -12,30 +12,14 @@ if DEBUG then
 					   })
 
 end
-   
 
 lua_assert = function(x) assert(x) end
 luaX:init()
-failing = [[
-local ret = ""
-for k,v in pairs({1,'a',3}) do
-   ret = ret .. k .. ":" .. v .. "|"
-end
-assert(ret == "1:1|2:a|3:3|", ret)
-print(ret)
-]] 
-
--- make modluac && luac modluac.lua && node lvm.js | lua
-working = [[
-   local t = {name="test"}
-   
-   print("hi:"..t.name)
-]]
 
 assert(arg and arg[1], "usage: node lvm.js <luafile>...")
-lua = io.open and io.open(arg[1],"rb"):read("*all") 
+local lua = io.open and io.open(arg[1],"rb"):read("*all") 
 local zio = luaZ:init(luaZ:make_getS(lua), nil)
-local func = luaY:parser({}, zio, nil, arg and "@"..arg[1] or "@yluacx")
+local func = luaY:parser({}, zio, nil, "@"..arg[1])
 local writer, buff = luaU:make_setS()
 luaU:dump({}, func, writer, buff)
 io.write(buff.data)

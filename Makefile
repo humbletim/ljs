@@ -3,7 +3,8 @@
 all: demo.html
 
 demo.html: demo.lua.output.html \
-	       	demo.luac.js demo.lua.src.html 
+	       	demo.luac.js demo.lua.src.html
+#			yueliang.luac.js
 #                 testmodule.luac.js testmodule2.luac.js \
 #	             testmodule.lua.src.html testmodule2.lua.src.html
 
@@ -76,6 +77,12 @@ testdump:
 		cat lopcodes.lua ldump.lua \
 	 test/test_ldump.lua ) | sed -e 's/^dofile/--dofile/g' > testdump.lua
 
+yueliang.luac: misc/mluac.lua
+	( ( cd ../yueliang-0.4.1/orig-5.1.3 && \
+	cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua ) ; \
+	cat misc/mluac.lua ) | sed -e 's/^dofile/--dofile/g' > yueliang.lua
+	luac -o yueliang.luac yueliang.lua
+
 modluac: misc/yluac.lua
 	( ( cd ../yueliang-0.4.1/orig-5.1.3 && \
 	cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua ) ; \
@@ -89,17 +96,5 @@ ytest: modluac
 	done'
 
 ##### experimenting with modules
-testmodule.luac.js: testmodule.lua
-	luac -o $<c $<
-	lua util/luac2js.lua $<c > $@
-
-testmodule2.luac.js: testmodule2.lua
-	luac -o $<c $<
-	lua util/luac2js.lua $<c > $@
-
-testmodule.lua.src.html: testmodule.lua
-	perl util/lua2html.pl $< > $@
-
-testmodule2.lua.src.html: testmodule2.lua
-	perl util/lua2html.pl $< > $@
-
+yueliang.luac.js: yueliang.luac
+	lua util/luac2js.lua $< > $@
