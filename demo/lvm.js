@@ -9,7 +9,7 @@
 // EXAMPLE node: luac <input.lua> && node lvm.js
 // EXAMPLE browser: see demo.html
 
-var _VERSION = "Lua 5.1  {ljs=0.0011}"
+var _VERSION = "Lua 5.1  {ljs=0.00111}"
 
 // TODO: find a generic javascript logger
 // SEE: demo.html for browser stubs
@@ -66,12 +66,12 @@ function LValue(vm, type, value)
 }
 
 var _hasprop = function(thing, key) {
-  return key in thing;
+	return thing.hasOwnProperty(key);
 };
 
-if (typeof navigator == 'object' && !/opera/i.test(navigator.userAgent)) {
+if (typeof navigator == 'object' && /opera/i.test(navigator.userAgent)) {
   _hasprop = function(thing, key) {
-	return thing.hasOwnProperty(key);
+	return key in thing;
   };
 }
 
@@ -476,7 +476,6 @@ function LVM()
 	this.callstack = [];
 	this.stack = [];
 	this.OPS = 0;
-	this.cputime = 0;
 	return this;
 }
 
@@ -1070,7 +1069,7 @@ function openlibs(testvm) {
 	  return [this.LValue(m.value*Math.pow(2, e.value))];
 	},
 	frexp: function(x) {
-	  sys.puts("dependency: require('./misc/frexp')!");
+	  sys.debug("dependency: require('./misc/frexp')!");
 	  var em = require('./misc/frexp').frexp(x.value);
 	  //sys.debug(sys.inspect(["frexp(x)=",em.exponent,em.mantissa]));
 	  return [this.LValue(em.mantissa),this.LValue(em.exponent)];
