@@ -3,7 +3,7 @@
   <head>
 	<title>Lua VM in Javascript demo</title>
     <meta id="viewport" name="viewport"
-          content="width=device-width; height=device-height; user-scalable=yes; initial-scale=1.0;" />
+          content="width=device-width; height=device-height; user-scalable=yes; initial-scale=1.0; minimum-scale=0.5; maximum-scale=2.0; " />
 
 <script type="text/javascript">
 
@@ -77,10 +77,11 @@ var stubs = {
 
 <script type="text/javascript">
 
+var demo_out_default = "";
 function clearoutput() { 
   _HTML = "";
   domoutput();
-  document.getElementById("demo_out").innerHTML = "";
+  document.getElementById("demo_out").innerHTML = demo_out_default;
 }
 
 var _HTML = "";
@@ -117,13 +118,19 @@ function browtest() {
 function handlrewidth() {
   window.onresize = null;
   setTimeout(function() {
-			   var fiftyp = document.getElementById('fiftyp');
-			   var headerp = document.getElementById('headerp');
 			   if ((window.innerWidth||document.body.clientWidth) != window._lastWidth) {
 				 window._lastWidth = window.innerWidth||document.body.clientWidth;
-				 var h = fiftyp.clientHeight - headerp.clientHeight - 50;
+				 var trs = document.getElementsByTagName("tr");
+				 var fill = document.getElementById('height_setter');
+				 var filltr = fill.parentNode;
+				 var fiftyp = document.getElementById('fiftyp');
+				 var h = fiftyp.clientHeight - trs.length*8 - 4;
+				 if (document.all) h -= 8;
+				 for (var i=0; i < trs.length; i++)
+				   if (trs[i] != filltr) 
+					 h -= trs[i].firstChild.clientHeight;
 				 //domoutput("width:"+window._lastWidth+"/"+h);
-				 document.getElementById('height_setter').height = Math.max(50, h);
+				 fill.height = h;
 			   }
 			   setTimeout(function() { 
 							if (_out) _out.scrollTop=_out.scrollHeight-_out.clientHeight;
@@ -135,6 +142,7 @@ window.onresize = handlrewidth;
   
 
 window.onload = function() {
+  demo_out_default = document.getElementById("demo_out").innerHTML;
   domoutput("initializing..."+navigator.userAgent.substring(0,50)+"...");
   if (/opera/i.test(navigator.userAgent))
 	document.body.className = 'opera';
@@ -156,9 +164,15 @@ window.onload = function() {
 				 BrowserLua.VM.OPS = 0;
 				 BrowserLua._evalString.apply(BrowserLua, arguments);
 				 var now = new Date().getTime();
+				 var nOPS = (BrowserLua._lastdoOPS+BrowserLua._lastcompileOPS);
+				 var OPS = nOPS + " OPS";
+				 if (nOPS > 999)
+				   OPS = Math.round(nOPS/100)/10 +" kOPS";
 				 document.getElementById("demo_out").innerHTML =	(now - start)+ " ms ("+
-				 Math.round(BrowserLua._lastcompilems / (BrowserLua._lastcompilems+BrowserLua._lastdoms) *10000)/100 +"% compiling)"+
-				 " ; " + Math.round(BrowserLua._lastcompileOPS/100)/10 +" kOPS ("+Math.round(BrowserLua._lastcompileOPS / BrowserLua.VM.OPS*10000)/100 +"% compiling)";
+				 (BrowserLua._lastcompileOPS ? Math.round(BrowserLua._lastcompilems / (BrowserLua._lastcompilems+BrowserLua._lastdoms) *10000)/100 +"% compiling" : "cached bytecode")+
+				 ")"+
+				 " ; " + OPS +
+				 (BrowserLua._lastcompileOPS  ? " ("+Math.round(BrowserLua._lastcompileOPS / BrowserLua.VM.OPS*10000)/100 +"% compiling)" : "");
 				 //	if (typeof console == 'object') console.warn(BrowserLua._lastcompilems + "ms compiling, "+BrowserLua._lastdoms+" ms running");
 			   }
 
@@ -289,13 +303,10 @@ input { background-color: #ccc; border: solid 1px white; }
 			</div>
 		  </td>
 		</tr>
-		<tr><th id='demo_out'></th></tr>
+		<tr><th id='demo_out'>&copy; <a href='http://github.com/humbletim/ljs'>http://github.com/humbletim/ljs</a></th></tr>
 
 	  </table>
 	</div>
-   <br clear="both" />
-	<center><table><tr><td style='padding:2px;'>demo copyright &copy; <a href='http://github.com/humbletim/ljs'>http://github.com/humbletim/ljs</a></td></tr></table></center>
-
-	<div style='height:70%;position:absolute;left:-99999px;top:0px;z-index:-9;' id='fiftyp'>....</div>
+	<div style='height:100%;position:absolute;left:-99999px;top:0px;z-index:-9;' id='fiftyp'>....</div>
   </body>
 </html>

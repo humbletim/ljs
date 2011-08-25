@@ -42,6 +42,7 @@ BrowserLua._init_evalString = function() {
   
   // set top-level global compilestring, so can leverage .callLua
   BrowserLua._G.value.compilestring = BrowserLua._G.value.yueliang.value.compilestring;
+  BrowserLua._bytecodecache = {};
   BrowserLua.evalString = function(luacode, name) {
 	name = name || "=BrowserLua.evalString";
 	var jsret = [];
@@ -52,7 +53,10 @@ BrowserLua._init_evalString = function() {
 	  function(){
 		var iOPS = BrowserLua.VM.OPS;
 		var itime = new Date().getTime();
-		var bytecode = BrowserLua.callLua("compilestring", luacode, name)[0];
+		BrowserLua._bytecodecache[luacode] = 
+		  BrowserLua._bytecodecache[luacode] || 
+		  BrowserLua.callLua("compilestring", luacode, name)[0];
+		var bytecode = BrowserLua._bytecodecache[luacode];
 		BrowserLua._lastcompileOPS = BrowserLua.VM.OPS - iOPS;
 		BrowserLua._lastcompilems = (new Date().getTime() - itime);
 		iOPS = BrowserLua.VM.OPS;
