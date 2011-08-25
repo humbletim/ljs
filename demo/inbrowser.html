@@ -1,0 +1,356 @@
+
+<html>
+  <head>
+	<title>Lua VM in Javascript demo</title>
+
+<script type="text/javascript">
+
+// ljs/demo.html -- Lua VM in Javascript test page
+
+// ljs Released under MIT/X11 license
+// Copyright (c) 200x-2010 Matthew Wild
+// Copyright (C) 2011 Tim Dedischew
+// see: https://github.com/humbletim/ljs
+// see: http://code.matthewwild.co.uk/ljs/
+
+// yueliang.luac.js (MIT/X11)
+// Yueliang Copyright (C) 2005-2008 Kein-Hong Man
+// Lua 5.0.3 Copyright (C) 2003-2006 Tecgraf, PUC-Rio.
+// Lua 5.1.3 Copyright (C) 1994-2008 Lua.org, PUC-Rio.
+// see: http://yueliang.luaforge.net/
+
+// frexp.java (CC BY-SA 3.0) http://stackoverflow.com/faq#editing
+// .lua/.js port of http://stackoverflow.com/questions/1552738/is-there-a-java-equivalent-of-frexp/1562857#1562857
+// original author: http://stackoverflow.com/users/122428/jitter
+// ported by http://github.com/humbletim/ljs
+
+// BrowserLua (MIT)
+// (concept by Alexander Gladysh)
+// Copyright (C) 2010 Browser-Lua authors
+// see: https://github.com/agladysh/browser-lua
+
+//== -- BROWSERLUA --
+var BrowserLua = {
+  _filez: {}, // this gets populated by .luac.js script includes below
+
+   //== BrowserLua.provideFile(path, file_contents_string)
+   provideFile: function(path, file_contents_string) {
+	 this._filez[path] = file_contents_string;
+   }
+};
+//== -- /BROWSERLUA --
+
+</script>
+
+<script type="text/javascript">
+
+// TODO: replace remaining node-specific stuff in lvm.js...
+// -- NODE --
+var stubs = {
+  sys: {
+	_printbuf: "",
+	_outputline: function(s) { 
+	  console.log("sys._outputline: "+s);
+	},
+	puts: function() { stubs.sys.print(Array.prototype.slice.call(arguments)+"\n"); },
+// 	log: function(s) { stubs.sys.puts(new Date()+": "+s);},
+	print: function(s) { 
+	  // emulate node(?) sys.print behaviour for lvm.js
+	  if (/\n/.test(s)) {
+		stubs.sys._outputline(stubs.sys._printbuf+s);
+		stubs.sys._printbuf = "";
+	  } else
+		stubs.sys._printbuf += s;
+	},
+	inspect: function(s) { return s ; }
+  }
+  // 		,fs: {
+  // 	  readFileSync: function(f) { return filez[f]; }
+  // 	  },
+  // 		,process: {
+  // 	  exit: function() {}
+  // 	  }
+};
+
+/*javascript: global*/ require = function(it) {
+  return (stubs)[it];
+};
+// -- /NODE --
+</script>
+
+<!-- ... BrowserLua.provideFile("yueliang.luac", "<bytecode>") -->
+<script type="text/javascript" src="yueliang.luac.js"></script>
+
+<!-- Lua VM -->
+<script type="text/javascript" src="lvm.js"></script>
+
+<script type="text/javascript">
+
+//== -- BROWSERLUA --
+
+//== BrowserLua.init([enabled_backends])
+BrowserLua.init = function() {
+
+  BrowserLua.VM = new LVM();
+  BrowserLua._G = openlibs(BrowserLua.VM);
+
+  BrowserLua._loadmodule = function(NAME, _M) {
+	//	console.warn("_loadmodule", arguments);
+
+	// note: NAME will be require'NAME'
+	var bytecode = BrowserLua._filez[NAME+".luac"];
+	if (!bytecode) throw "no file '"+NAME+".luac"+"'";
+	var m = BrowserLua.VM.loadstring(
+	  bytecode,
+	  _M
+	);
+	var ret = this.vm.call(m, [this.vm.LValue(NAME)]); // calls main chunk
+	//	console.warn("ret:",ret);
+	return ret[0];
+  };
+
+
+  BrowserLua.VM._setpreload("yueliang", BrowserLua._loadmodule);
+  BrowserLua._G.value.require.call([BrowserLua.VM.LValue("yueliang")]);
+  (function(_G, testvm) {
+	_G.value.math.setIndex(testvm.LValue("frexp"),
+						   _G._packageloaded.index(
+							 testvm.LValue("./misc/frexp")
+						   ).index(testvm.LValue("frexp")));
+  })(BrowserLua._G, BrowserLua.VM);
+
+
+  BrowserLua._G.value.compilestring = BrowserLua._G.value.yueliang.value.compilestring;
+  BrowserLua.evalString = function(luacode, name) {
+	name = name || "=BrowserLua.evalString";
+	var jsret = [];
+	var old = BrowserLua._setoutput(function(s) {
+	  domoutput("> "+s);
+	  });
+	BrowserLua._pcall(
+	  function(){
+		var bytecode = BrowserLua.callLua("compilestring", luacode, name)[0];
+		var ret = BrowserLua.doString(bytecode);
+		for (var i=0; i < ret.length; i++)
+		  jsret[i] = ret[i].value.toString();
+	});
+	BrowserLua._setoutput(old); // i do a lot of testing from Firebug, so reset
+	return jsret;
+  };
+  // hmmm
+  BrowserLua._pcall = function(jsfunc) {
+	try {
+	  return jsfunc.apply(this, Array.prototype.slice.call(arguments,1));
+	} catch(e) {
+	  try {
+		//sys.puts("caught error in ljs.BrowserLua._pcall..."+e);
+		var trace = this.VM.traceback();
+		var currframe = trace[0];
+		if(currframe) {
+		  sys.print("ljs.BrowserLua._pcall: "+
+					currframe.sourceName+":"+currframe.line+": ");
+
+		} else
+		  sys.print("ljs.BrowserLua._pcall: <no frame>:");
+		sys.puts(e);
+
+		if(typeof(e) == "object" && "stack" in e)
+		  sys.puts(e.stack);
+ 		else {
+ 		  sys.puts("stack traceback:");
+ 		  trace[trace.length-1].todo = "in main chunk";
+ 		  for (var i=0; i < trace.length; i++)
+ 			sys.puts("\t"+trace[i].sourceName+":"+trace[i].line+": "+(trace[i].todo||"[todo]"));
+ 		}
+		//process.exit(1);
+		this.VM.callstack = [];
+	  } catch(e) { alert(e) };
+	  //throw e;
+	}
+  };
+
+  //== BrowserLua.doFile(path)
+  BrowserLua.doFile = function(path) {
+	if (!this._filez[path]) throw "<err>ljs.BrowserLua.doFile on non-provideFile'd: "+path+"</err>";
+	BrowserLua.doString(BrowserLua._filez[path]);
+  };
+
+
+  //== BrowserLua.doString(lua_code, [chunkname])
+  BrowserLua.doString = function(lua_code) {
+	if (!/^\x1b\x4c\x75\x61\x51\x00/.test(lua_code))
+	  throw "ljs.BrowserLua.doString only handles bytecode (no compiler)";
+// 	return this._pcall(
+// 	  function(){
+		var testvm = this.VM;
+		var _G = this._G;
+		
+		var f = testvm.loadstring(lua_code, _G);
+		var arg = [];
+		"arg1 arg2".replace(/\w+(\d)/g,
+							function(x,n) {
+							  var jsv = document.getElementById(x).value;
+							  arg[n*1-1] = testvm.LValue(jsv);
+							});
+
+		var ret = testvm.call(f, arg);
+		if(ret.length)
+		  sys.puts("ljs Returned: "+sys.inspect(ret));
+		return ret;
+// 	  }
+// 	);
+  };
+
+  //== BrowserLua.callLua(functionName, args, ...) --> array of return values
+  BrowserLua.callLua = function(functionName) {
+	//TODO: error/argument/type checking
+	var lfunc = this._G.index(this.VM.LValue(functionName));
+	var largs = [];
+	for (var i=1; i < arguments.length; i++)
+	  largs.push(this.VM.LValue(arguments[i]));
+	var ret = this.VM.call(lfunc, largs);
+	var jsret = [];
+	for (var i=0; i < ret.length; i++)
+	  jsret[i] = ret[i].value;
+	return jsret;
+  };
+//== -- /BROWSERLUA --
+
+  // hmmmmmmm
+  BrowserLua._getglobal = function(name) {
+	return this._G.index(this.VM.LValue(name));
+  };
+  BrowserLua._setoutput = function(jsfunc) {
+	var old = stubs.sys._outputline;
+	stubs.sys._outputline = jsfunc;
+	return old;
+  };
+};
+</script>
+
+<script type="text/javascript">
+
+var start = new Date().getTime();
+function clearoutput() { 
+  var out = document.getElementById('output');
+  out.scrollTop=0;
+  out.innerHTML = "";
+}
+
+function domoutput(s){
+  var out = document.getElementById('output');
+  var eol = /msie/i.test(navigator.userAgent) ? "<br />" : "";
+  out.innerHTML += s + (!/\n$/.test(s)?"<br />":eol);
+  out.scrollTop=out.scrollHeight-out.clientHeight;
+}
+
+// run the test bytecode
+function browtest() {
+  var old = BrowserLua._setoutput(domoutput);
+  BrowserLua._pcall(
+	function(){
+	  BrowserLua.evalString("print(_VERSION)");
+	  domoutput("<b><i>"+new Date().toUTCString()+" DONE</i></b>");
+	});
+  BrowserLua._setoutput(old); // i do a lot of testing from Firebug, so reset
+}
+
+window.onload = function() {
+  BrowserLua.init();
+  document.getElementById('demo.eval').disabled=false;
+  setTimeout(browtest, 1);
+};
+
+function dump_G() {
+  // FIXME: expose some API for this rather than deep-diving into lvm..
+  domoutput("----------------");
+  domoutput("dumping _G");
+  domoutput("----------------");
+  for (var p in BrowserLua._G.value)
+	domoutput(p+"\t"+ BrowserLua._getglobal(p).type);
+
+//   domoutput("----------------");
+//   domoutput("dumping _G.package.loaded");
+//   domoutput("----------------");
+//   var loaded =  BrowserLua._G.value.package.value.loaded.value;
+//   for (var p in loaded)
+// 	domoutput(p+"\t"+ loaded[p].type);
+}
+
+function evalcode() {
+	  document.getElementById("demo.out").innerHTML = sys.inspect(BrowserLua.evalString(document.getElementById("demo.in").value));
+}
+
+
+</script>
+  </head>
+  <body>
+	<style type="text/css">
+	  err { color:#f33; font-weight:bold; }
+	  body { color:#fff; background-color: #111; font-family: arial; margin:2px;}
+	  table { border-color: #aaa; background-color:#333;-moz-border-radius: 15px;border-radius: 15px; padding:8px; margin: 1px;}
+#output { overflow:auto; width:100%;margin:0px;padding:0px;overflow-y:scroll;height:100%; font-family:monospace;}
+	  td { padding:10px;vertical-align: top; font-size:.9em;font-family:monospace; -moz-border-radius: 8px;border-radius:8px; width:100%; overflow-x:hidden;}
+	  iframe { width:100%;height:98%;background-color:#ccc; }
+	  td.code { background-color:#aaa; }
+	  th { color:#6c6;  -moz-border-radius: 8px;border-radius:8px;
+		   border: solid 1px #444; padding:2px;}
+	  code { border: solid 1px black; padding: 2px; cursor: pointer}
+	  button, input { margin-top: 4px; }
+	  button { background-color: #6cc; 
+	  -moz-border-radius: 8px;border-radius:8px;
+	  border: solid 1px #6aa; font-family: Helvetica;
+	  cursor:pointer; font-size: 14px; padding:3px;
+	  }
+	  input { xfont-size: .8em; background-color: #ccc; }
+	  #demo.out { color: #66c }
+	  a { text-decoration: none; color: #66c; }
+	</style>
+	<div style='xheight:100%;'>
+
+	  <table width='100%'>
+		<tr><td style='margin:0;padding:0;height:90px;width:100%;'>
+<div style='float:right;padding-right:87px;'>
+			  <a href="http://github.com/humbletim/ljs">
+				<img style='position:absolute;top:5px;' border="0" src="forkme_small.png" alt="Fork me on GitHub"></a></div>
+
+			<div id='commands' style='padding-left:8px;'>
+			  <button onclick='dump_G();'>dump _G</button>
+			  <button onclick='clearoutput();'>clear</button><br />
+			  <button onclick='browtest();'>lua:print(_VERSION)</button>
+			</div>
+		  </td></tr>
+		<tr><th>Lua VM in Javascript - <a href='http://github.com/humbletim/ljs'>ljs</a></th></tr>
+		<tr><td>
+			<span id='demo.out'></span>
+			<input type='text' tabindex="1" style='width:50%;' id='demo.in' 
+			 value='for k,v in pairs(_G) do print(k,v) end'
+			 onkeyup='if (13 == ((arguments[0]||[]).keyCode||window.event.keyCode)) { evalcode();  }'/>
+			  <input tabindex="2" size='10' type='text' value='(arg 1)' 
+				id='arg1' 
+				onfocus='this.onfocus=null;this.value="";'
+				onchange='this.onfucus=null;'
+				/>
+			  <input tabindex="3" type='text' size='10' value='(arg 2)' 
+				id='arg2' 
+				onchange='this.onfocus=null;'
+				onfocus='this.onfocus=null;this.value="";'
+				/>
+
+			  <button id='demo.eval' disabled='disabled' onclick='evalcode();' tabindex="4">go</button>
+		  </td></tr>
+		  <tr>
+			<td height='300' style='background-color:#555;width:100%;'>
+			<div style='margin:0;padding:0;position:relative;width:100%;height:100%;'>
+			  <div style='margin:0;padding:0;position:absolute;width:100%;height:100%;'>
+				<pre id='output'></pre>
+			  </div>
+			</div>
+		  </td>
+		</tr>
+	  </table>
+	</div>
+	<br clear='all' />
+	<center><table><tr><td style='padding:2px;'>demo copyright &copy; <a href='http://github.com/humbletim/ljs'>http://github.com/humbletim/ljs</a></td></tr></table></center>
+  </body>
+</html>

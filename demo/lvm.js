@@ -9,7 +9,7 @@
 // EXAMPLE node: luac <input.lua> && node lvm.js
 // EXAMPLE browser: see demo.html
 
-var _VERSION = "Lua 5.1  {ljs=0.001}"
+var _VERSION = "Lua 5.1  {ljs=0.0011}"
 
 // TODO: find a generic javascript logger
 // SEE: demo.html for browser stubs
@@ -65,6 +65,16 @@ function LValue(vm, type, value)
 	this.value = value;
 }
 
+var _hasprop = function(thing, key) {
+  return key in thing;
+};
+
+if (typeof navigator == 'object' && !/opera/i.test(navigator.userAgent)) {
+  _hasprop = function(thing, key) {
+	return thing.hasOwnProperty(key);
+  };
+}
+
 LValue.prototype = {
 	call: function (args)
 	{
@@ -103,7 +113,11 @@ LValue.prototype = {
 	  if(this.type == "table") {
 
 		if (0 > "string number nil".indexOf(key.type))
-		  throw "(TODO) ljs.table.index - sorry, table key can't be this type yet:"+key.type;
+		  throw "(TODO) ljs.table.index - sorry"+
+			", table key can't be this type yet:"+key.type;
+
+		// lua allows table[nil] for lookup
+		if (key.type == 'nil') return this.vm.LValue(null); 
 
 		// RE: lua tables vs. js Arrays 
 		// in all js it seems non-int gets coerced to strings
@@ -118,10 +132,14 @@ LValue.prototype = {
 		*/
 
 		// see: updated len() implementation
-		var kv = key.value.toString(); 
-		if(kv in this.value)
+		var kv = key.value.toString();
+
+		// .hasOwnProperty so "concat" doesn't pick up javascript:[].concat
+		if (_hasprop(this.value, kv)) {
+		  if (typeof(this.value[kv]) == 'function')
+			throw  "javascript key issue..."+kv+"="+typeof(this.value[kv]);
 		  return this.value[kv];
-		
+		}
 		if(raw != true && this.metatable && this.metatable.type != "nil") {
 		  var __index = this._getMeta("__index");
 		  if(__index.type == "function") {
@@ -141,7 +159,7 @@ LValue.prototype = {
 	  if(this.type == "table") {
 		var kv = key.value;
 		if (key.type == 'number') kv = kv.toString();
-		if ( !raw && this.metatable &&  !( kv in this.value)) {
+		if ( !raw && this.metatable &&  !_hasprop(this.value, kv)) {
 		  var metamethod = this._getMeta("__newindex");
 		  if (metamethod)
 			return metamethod.call([this,key,value]);
@@ -520,7 +538,10 @@ LVM.prototype = {
 					   (f.environment.value.arg||null)+"/"+this._arg.length);
 
 			// note: make a copy, since this will re-index from 0-based to 1-based...
-			frame.f.environment.value.arg = this.LValue(args.slice());
+			frame.f.environment.setIndex(
+			  this.LValue("arg"),
+			  this.LValue(args.slice(0))
+			);
 
 			var ret = this.run(frame);
 			this._arg = null;
@@ -569,9 +590,9 @@ LVM.prototype = {
 				break;
 			case OP_GETUPVAL:
 				var upvalue = frame.f.upvalues[INS_B(instruction)];
-				// FIXME: not sure why this was previously copying the upvalue?
-				//  (.metatable is lost taht way, so trying direct ref...) -t
-				frame.reg[INS_A(instruction)] = upvalue;//new LValue(this, upvalue.type, upvalue.value);
+				frame.reg[INS_A(instruction)] = new LValue(this, upvalue.type, upvalue.value);
+ 				if (upvalue.metatable)
+ 				  frame.reg[INS_A(instruction)].metatable = upvalue.metatable;
 				break;
 			case OP_GETGLOBAL:
 				var name = frame.f.constants[INS_Bx(instruction)];
@@ -582,6 +603,7 @@ LVM.prototype = {
 				var upvalue = frame.f.upvalues[INS_B(instruction)];
 				upvalue.type = reg.type;
 				upvalue.value = reg.value;
+				upvalue.metatable = reg.metatable;
 				break;
 			case OP_SETGLOBAL:
 				var name = frame.f.constants[INS_Bx(instruction)];
@@ -589,6 +611,7 @@ LVM.prototype = {
 				break;
 			case OP_LOADK:
 				var constant = frame.f.constants[INS_Bx(instruction)];
+				if (constant.metatable) throw "OP_LOADK: FIXME: metatable support?";
 				frame.reg[INS_A(instruction)] = new LValue(this, constant.type, constant.value);
 				break;
 			case OP_NEWTABLE:
@@ -598,6 +621,8 @@ LVM.prototype = {
 				var C = INS_C(instruction);
 				var value = frame.reg[INS_B(instruction)].index(RK(frame, C));
 				frame.reg[INS_A(instruction)] = new LValue(this, value.type, value.value);
+				if (value.metatable)
+				  frame.reg[INS_A(instruction)].metatable = value.metatable;
 				break;
 			case OP_SETTABLE:
 				var C = INS_C(instruction);
@@ -768,17 +793,28 @@ LVM.prototype = {
 			case OP_FORPREP:
 				frame.pc+=(INS_sBx(instruction));
 				var A = INS_A(instruction);
+				
+				// make a copy of initializer ('x' in lua: for i=x,0,-1)
+				frame.reg[A] = new LValue(this, "number", frame.reg[A].value);
+
 				frame.reg[A].value -= frame.reg[A+2].value;
+// 				sys.puts(sys.inspect(["OP_FORPREP", frame.reg[A].value, frame.reg[A+2].value]));
 				break;
 			case OP_FORLOOP:
 				var A = INS_A(instruction);
 				var RA = frame.reg[A];
 				RA.value += frame.reg[A+2].value;
-				if(RA.value <= frame.reg[A+1].value)
-				{
+
+				var contd = frame.reg[A+2].value > 0
+				  ? RA.value <= frame.reg[A+1].value
+				  : RA.value >= frame.reg[A+1].value;
+				  
+				//				sys.puts(sys.inspect(["OP_FORLOOP", RA.value, frame.reg[A+2].value, contd]));
+				if(contd)
+				  {
 					frame.pc += INS_sBx(instruction);
 					frame.reg[A+3] = new LValue(this, "number", RA.value);
-				}
+				  }
 				break;
 			case OP_TFORLOOP:
 				var A = INS_A(instruction);
@@ -989,13 +1025,15 @@ function openlibs(testvm) {
 	},
 	tonumber: function(o)
 	{
-	  var v = (parseFloat(o.value)||null);
+	  var v = parseFloat(o.value);
+	  if (isNaN(v))
+		v = null;
 	  //sys.puts("tonumber("+o.value+"/"+o.type+") == "+v+typeof(v));
 	  return [this.LValue(v)];
 	},
 	assert: function (expr, message)
 	{
-	  if(!expr.truth())
+	  if(!expr || !expr.truth())
 		if(message && message.truth())
 		  throw message;
 		else
@@ -1018,8 +1056,12 @@ function openlibs(testvm) {
 		return [this.LValue(matches[curr++]),matches[curr++]];
 	  };
 	  return [this.LValue(iter)];
+	},
+	loadstring: function(chunk) {
+	  if (!/^\x1b\x4c\x75\x61\x51\x00/.test(chunk.value))
+		throw "ljs.loadstring only handles bytecode (no compiler)";
+	  return [this.loadstring(chunk.value, this.LValue([]))];
 	}
-	  
   };
 
   var math = {
@@ -1027,8 +1069,11 @@ function openlibs(testvm) {
 	{
 	  return [this.LValue(m.value*Math.pow(2, e.value))];
 	},
-	xfrexp: function(x) {
-	  return [this.LValue(0),this.LValue(0)];
+	frexp: function(x) {
+	  sys.puts("dependency: require('./misc/frexp')!");
+	  var em = require('./misc/frexp').frexp(x.value);
+	  //sys.debug(sys.inspect(["frexp(x)=",em.exponent,em.mantissa]));
+	  return [this.LValue(em.mantissa),this.LValue(em.exponent)];
 	  },
 	floor: function (x)
 	{
@@ -1041,9 +1086,13 @@ function openlibs(testvm) {
 	random: function ()
 	{
 	  if(arguments.length!=0)
-		throw "math.random arguments not implemente";
+		throw "math.random arguments not implemented";
 
 		return [this.LValue(Math.random())];
+	},
+	abs: function(x)
+	{
+	  return [this.LValue(Math.abs(x.value))];
 	}
   };
 
@@ -1069,10 +1118,11 @@ function openlibs(testvm) {
 	  if (patt.length == 1 && /[\[+*?()\\/]/.test(patt)) {
 		patt = "\\"+patt;
 		//sys.puts("(verify) single-char pattern escaped: "+patt);
+		return new RegExp(patt,"g");
 	  }
 				
 	  var regexp = "";
-
+	  var original = patt;
 	  // not all js supports string indexing...
 	  if (patt.length && patt[0] === undefined)
 		patt = patt.match(/[\s\S]/g);
@@ -1107,21 +1157,24 @@ function openlibs(testvm) {
 		  regexp += c;
 		}
 	  var old = regexp;
-	  if (patt[0] == '[' && patt.indexOf('%') > 0 ) {// FIXME: only handles "[_%a]" but not ".+[_%a]" !!!!
+	  if (patt[0] == '[' && original.indexOf('%') > 0 ) {// FIXME: only handles "[_%a]" but not ".+[_%a]" !!!!
 		regexp = "["+regexp.substring(1,regexp.length-1).replace(/[\[\]]/g,'')+"]";
-		sys.puts(patt+" :: "+regexp+" (was '"+old+"')")
+		//sys.debug&&sys.debug(patt+" :: "+regexp+" (was '"+old+"')")
 	  }
-	  
+
 	  return new RegExp(regexp, "g");
 	};
 
   var string = {
 	len: function(s) { return [this.LValue(s.len())]; },
 	byte: function(s) { 
+	  if (s.type != 'string' && s.type != 'number')
+		throw "bad argument #1 to 'byte' (string expected, got "+s.type+")";
+
 	  var nArgs = arguments.length;
-	  if(nArgs != 1 || s.value.length != 1)
-		throw "ljs.string.byte(): only implemented single-char version...."+s.value.length;
-	  return [this.LValue(String.charCodeAt(s.value,0))];
+	  if(nArgs != 1)
+		throw "ljs.string.byte(): only implemented single-char version...."+nArgs;
+	  return [this.LValue(s.value.charCodeAt(0))];
 	},
 	"char": function ()
 	{
@@ -1140,21 +1193,37 @@ function openlibs(testvm) {
 	},
 	find: function (str, patt, init, plain)
 	{
-	  if(arguments.length > 2)
-		throw "string.find(): No more than the first 2 arguments supported"+arguments.length;
 	  if (str.type != 'string')
 		throw "bad argument #1 to 'find' (string expected, got "+str.type+")";
+
+	  var isplain = plain && plain.truth();
+	  var tstr = str.value;
+
+// 	  if(arguments.length > 2)
+// 		throw "string.find(): No more than the first 2 arguments supported"+arguments.length;
 	  
-	  var re = _patternToRegExp(patt.value);
-	  var result = re.exec(str);
+	  var offset = (init && init.type == 'number' ? init.value : 1) -1;
+ 	  if (offset > 1) {
+		tstr = tstr.substring(offset);
+		// 		sys.puts(sys.inspect(["offseted string.find", tstr]));
+ 	  }
+		
+	  var ret;
+	  if (isplain) {
+		re = new RegExp(patt.value.replace(/([\S\s])/g,'\\$1'), "g");
+		//sys.puts("(verify) string.find... plain mode!"+re);
+	  } else {
+		re = _patternToRegExp(patt.value);
+	  }
+	  var result = re.exec(tstr);
 	  if(!result) {
 		//		sys.puts(sys.inspect(["string.find", str.value, patt.value, ""+re, start, end]))
 		return [this.LValue(null)];
 	  }
-	  var start = result.index+1;
+	  var start = result.index+1 + offset;
 	  var end = start + result[0].length - 1;
 	  var ret = [this.LValue(start), this.LValue(end)];
-	  //	  sys.puts(sys.inspect(["string.find", "xxx"+str.value, patt.value, ""+re, start, end]))
+	  //sys.puts(sys.inspect(["string.find", patt.value, ""+re, start, end]))
 	  for(var i=1; i<result.length; i++)
 		ret.push(this.LValue(result[i]));
 	  return ret;
@@ -1204,11 +1273,15 @@ function openlibs(testvm) {
 		case 1:
 		  throw "string.sub(): Expected 2 or more arguments";
 		case 2:
-		  result = str.value.substring(from.value-1);
+		  result = str.value.substring(
+			from.value < 0 ? str.value.length + from.value : from.value-1);
+		  //sys.puts(sys.inspect(["string.sub",str.value,from.value,result]))
 		  break
 		case 3:
-		  //sys.puts(sys.inspect(["string.sub",str,from,to]));
-		  result = str.value.substring(from.value-1, to.value);
+		  result = str.value.substring(
+			from.value < 0 ? str.value.length + from.value : from.value-1,
+			to.value < 0 ? str.value.length + to.value + 1 : to.value);
+		  //sys.puts(sys.inspect(["string.sub",str.value,from.value,to.value,result,result.length]));
 		  break
 		}
 	  //	  sys.debug(sys.inspect(["string.sub", str, from, to, result]))
@@ -1219,6 +1292,12 @@ function openlibs(testvm) {
 	  for (var i=0; i < n.value ;i++)
 		ret += str;
 	  return [this.LValue(ret)];
+	},
+	lower: function(s) {
+	  s = s || { type:'no value' };
+	  if (s.type != 'string' && s.type != 'number')
+		throw "bad argument #1 to 'lower' (string expected, got "+s.type+")";
+	  return [this.LValue(s.toString().toLowerCase())]
 	}
   };
 
@@ -1350,9 +1429,13 @@ function openlibs(testvm) {
   testvm.registerLib(_G, null, baselib);
   testvm.registerLib(_G, "math", math);
   testvm.registerLib(_G, "io", {
+	open: function() { 
+						 throw "io.open -- not available";
+						 
+					   } ,
 	write: function() {
-						 for (var i=0; i < arguments.length; i++) 
-						   sys.print(arguments[i].toString());
+						 for (var i=0; i < arguments.length; i++)
+						   sys.print(arguments[i].toString())
 						 return [];
 					   }
   });
@@ -1388,21 +1471,61 @@ function openlibs(testvm) {
 // ...  move this to standalone file!
 if (typeof process != 'undefined') { // node
   var fs=require("fs");
+  //  process.stdout.setEncoding("binary"); // doesn't seem to influence sys.print!
+  sys.print = function(stuff) { process.stdout.write(stuff, 'binary'); };
+	
   try {
 	var testvm = new LVM();
 	var _G = openlibs(testvm);
+
+	testvm.registerLib(_G, "os", {
+	  exit: function(n) {
+						   process.exit(n&&n.value);
+						 }
+	});
+	// FIXME: there's a better way
+	_G.value.io.setIndex(
+	  testvm.LValue("open"),
+	  testvm.LValue(
+		function(x) {
+		  //sys.puts("io.open"+x)
+		  // FIXME: insecure, should formally sandbox even for testing
+		  if (x.type != "string" || !/^tests\/pass\//.test(x.value))
+			throw "io.open dummy imp -- unexpected: "+x;
+		  var ret = this.LValue([]);
+		  ret.setIndex(this.LValue("read"),
+					   this.LValue(
+						 function(self,a) {
+						   if (self != ret) 
+							 throw "convoluted closure not working";
+						   if (a.value != "*all")
+							 throw "io.open.read dummy imp... unexpected: "+a.value;
+						   var lua = fs.readFileSync(x.value, "binary");
+						   sys.debug("io.open.read.*all "+x.value+"=="+lua.length);
+						   return [this.LValue(lua)];
+						 }));
+		  return [ret];
+		})
+	);
 
 	// ----------------------------------------------------------------------
 	// TODO: could automatically compile .lua to bytecode for node version...
 	var _loadmodule = function(nm, M) {
 	  sys.debug("_loadmodule..."+nm+M);
-	  var m = testvm.loadstring(fs.readFileSync(nm+".out", 
+	  var m = testvm.loadstring(fs.readFileSync(nm+".luac", 
 												"binary"), M);
 	  return m.call([testvm.LValue(nm)])[0];
 	}
-	testvm._setpreload("testmodule", _loadmodule);
-	testvm._setpreload("testmodule2", _loadmodule);
 	// -----------------------------------
+
+	if (0) {
+	  testvm._setpreload("yueliang", _loadmodule);
+	  _G.value.require.call([testvm.LValue("yueliang")]);
+	  _G.value.math.setIndex(testvm.LValue("frexp"),
+							 _G._packageloaded.index(
+							   testvm.LValue("./misc/frexp")
+							 ).index(testvm.LValue("frexp")));
+	}
 
 	var f = testvm.loadstring(fs.readFileSync("luac.out", "binary"), _G);
 
@@ -1411,7 +1534,10 @@ if (typeof process != 'undefined') { // node
 	for (var i=2; /* +2 bc [0] is process name [1] is script name*/
 		 i < process.argv.length; i++)
 	  arg.push(testvm.LValue(process.argv[i]));
-
+	
+	// FIXME: separate _G.arg from module(...) vararg magic (see ._arg above)
+	if (arg.length == 0)
+	  _G.setIndex(testvm.LValue("arg"), testvm.LValue([]));
 	var ret = testvm.call(f, arg);
 	if(ret)
 	  sys.debug("Returned: "+sys.inspect(ret));
@@ -1421,16 +1547,42 @@ if (typeof process != 'undefined') { // node
 	var currframe = trace[0];
 	if(currframe)
 	  {
-		sys.print("lua(ljs): "+currframe.sourceName+":"+currframe.line+": ");
-	  }
-	sys.puts(e);
+		sys.puts("lua(ljs): "+currframe.sourceName+":"+currframe.line+": "+e);
+	  } else
+	  sys.puts(e);
 	if(typeof(e) == "object" && "stack" in e)
 	  sys.puts(e.stack);
-	else {
+	else if (trace.length > 0) {
+	  var lines = [];
+	  try {
+		lines = (fs.readFileSync(trace[0].sourceName, "binary")).split(/\n/);
+	  } catch(e) { 
+		sys.debug("ljs.node: was going to inspect lua source, but:" +e);
+	  }
 	  sys.puts("stack traceback:");
-	  trace[trace.length-1].todo = "in main chunk";
-	  for (var i=0; i < trace.length; i++)
-		sys.puts("\t"+trace[i].sourceName+":"+trace[i].line+": "+(trace[i].todo||"<todo>"));
+	  trace[trace.length-1].context = "in main chunk";
+	  for (var i=0; i < trace.length; i++) {
+		if (lines.length) {
+		  // naive function name deduction...
+		  trace[i].actualSourceLine = lines[trace[i].line-1];
+		  if (!trace[i].context) {
+			for (var l=0; l < 100 && trace[i].line-1-l >= 0; l++) {
+			  var upline = lines[trace[i].line-1-l];
+			  var arr = upline.match(
+				/function ([\w:]+)?/
+			  ) || upline.match(/([\w:]+)\s*=\s*function/);
+			  if (arr) {
+				trace[i].context = "perhaps in function '"+(arr[1]||arr[2])+"'";
+				break;
+			  }
+			}
+		  }
+		}
+		sys.puts("\t"+trace[i].sourceName+":"+trace[i].line+": "+(trace[i].context||"<todo>"));
+
+		if (i == 0 || trace[i].actualSourceLine && process.argv[2] == '-v')
+		  sys.debug("(sourceline)\t"+trace[i].actualSourceLine);
+	  }
 	}
 	process.exit(1);
   }
