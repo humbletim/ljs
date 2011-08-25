@@ -29,5 +29,9 @@ function frexp(value)
       end
       mantissa = mantissa * sign
    end
-   return exponent, mantissa
+   return mantissa, exponent
 end
+
+package.loaded['./misc/frexp'] = {
+   frexp=frexp
+}

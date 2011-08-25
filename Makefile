@@ -77,10 +77,10 @@ testdump:
 		cat lopcodes.lua ldump.lua \
 	 test/test_ldump.lua ) | sed -e 's/^dofile/--dofile/g' > testdump.lua
 
-yueliang.luac: misc/mluac.lua
+yueliang.luac: misc/mluac.lua misc/frexp.lua
 	( ( cd ../yueliang-0.4.1/orig-5.1.3 && \
 	cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua ) ; \
-	cat misc/mluac.lua ) | sed -e 's/^dofile/--dofile/g' > yueliang.lua
+	cat misc/frexp.lua misc/mluac.lua ) | sed -e 's/^dofile/--dofile/g' > yueliang.lua
 	luac -s -o yueliang.luac yueliang.lua
 
 modluac: misc/yluac.lua

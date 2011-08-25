@@ -1070,6 +1070,7 @@ function openlibs(testvm) {
 	  return [this.LValue(m.value*Math.pow(2, e.value))];
 	},
 	frexp: function(x) {
+	  sys.puts("dependency: require('./misc/frexp')!");
 	  var em = require('./misc/frexp').frexp(x.value);
 	  //sys.debug(sys.inspect(["frexp(x)=",em.exponent,em.mantissa]));
 	  return [this.LValue(em.mantissa),this.LValue(em.exponent)];
@@ -1520,6 +1521,10 @@ if (typeof process != 'undefined') { // node
 	if (0) {
 	  testvm._setpreload("yueliang", _loadmodule);
 	  _G.value.require.call([testvm.LValue("yueliang")]);
+	  _G.value.math.setIndex(testvm.LValue("frexp"),
+							 _G._packageloaded.index(
+							   testvm.LValue("./misc/frexp")
+							 ).index(testvm.LValue("frexp")));
 	}
 
 	var f = testvm.loadstring(fs.readFileSync("luac.out", "binary"), _G);
