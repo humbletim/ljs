@@ -65,6 +65,16 @@ function LValue(vm, type, value)
 	this.value = value;
 }
 
+var _hasprop = function(thing, key) {
+  return key in thing;
+};
+
+if (typeof navigator == 'object' && !/opera/i.test(navigator.userAgent)) {
+  _hasprop = function(thing, key) {
+	return thing.hasOwnProperty(key);
+  };
+}
+
 LValue.prototype = {
 	call: function (args)
 	{
@@ -125,8 +135,7 @@ LValue.prototype = {
 		var kv = key.value.toString();
 
 		// .hasOwnProperty so "concat" doesn't pick up javascript:[].concat
-		if((!this.value.hasOwnProperty && kv in this.value) ||
-		   this.value.hasOwnProperty(kv)) {
+		if (_hasprop(this.value, kv)) {
 		  if (typeof(this.value[kv]) == 'function')
 			throw  "javascript key issue..."+kv+"="+typeof(this.value[kv]);
 		  return this.value[kv];
@@ -150,10 +159,7 @@ LValue.prototype = {
 	  if(this.type == "table") {
 		var kv = key.value;
 		if (key.type == 'number') kv = kv.toString();
-		if ( !raw && this.metatable &&  !(
-			   (!this.value.hasOwnProperty && kv in this.value) ||
-			   this.value.hasOwnProperty(kv)
-			 )) {
+		if ( !raw && this.metatable &&  !_hasprop(this.value, kv)) {
 		  var metamethod = this._getMeta("__newindex");
 		  if (metamethod)
 			return metamethod.call([this,key,value]);

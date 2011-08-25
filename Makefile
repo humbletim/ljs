@@ -81,7 +81,7 @@ yueliang.luac: misc/mluac.lua
 	( ( cd ../yueliang-0.4.1/orig-5.1.3 && \
 	cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua ) ; \
 	cat misc/mluac.lua ) | sed -e 's/^dofile/--dofile/g' > yueliang.lua
-	luac -o yueliang.luac yueliang.lua
+	luac -s -o yueliang.luac yueliang.lua
 
 modluac: misc/yluac.lua
 	( ( cd ../yueliang-0.4.1/orig-5.1.3 && \
