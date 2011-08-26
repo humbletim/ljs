@@ -104,6 +104,13 @@ function domoutput(s){
   _updateto = setTimeout(_domsync, 100);
 }
 
+if (typeof console == 'undefined') {
+  console={
+	warn:function(){ domoutput('(warn)'+Array.prototype.slice.call(arguments)+''); },
+	 log:function(){ domoutput('(log)'+Array.prototype.slice.call(arguments)+''); }
+  };
+}
+
 // run the test bytecode
 function browtest() {
 //   var old = BrowserLua._setoutput(domoutput);
@@ -154,8 +161,7 @@ window.onload = function() {
 				 times.start = new Date().getTime();
 			   }
 			   BrowserLua.init();
-			   if (BrowserLua._filez['yueliang.luac'])
-				 BrowserLua._init_evalString();
+			   BrowserLua._init_evalString();
 			   document.getElementById('demo.eval').disabled=false;
 			   document.getElementById('demo.eval').className = "";
 			   BrowserLua._evalString = BrowserLua.evalString;
@@ -202,13 +208,13 @@ window.onload = function() {
 };
 
 function dump_G() {
-  // FIXME: expose some API for this rather than deep-diving into lvm..
   domoutput("----------------");
   domoutput("dumping _G");
   domoutput("----------------");
-  for (var p in BrowserLua._G.value)
-	domoutput(p+"\t"+ BrowserLua._getglobal(p).type);
-
+  for (var p in BrowserLua._G.value) {
+	var v =  BrowserLua._getglobal(p);
+	domoutput(p+"\t"+(v&&v.type));
+  }
 //   domoutput("----------------");
 //   domoutput("dumping _G.package.loaded");
 //   domoutput("----------------");
@@ -222,7 +228,16 @@ function evalcode(lua) {
   document.getElementById('demo.eval').disabled=true;
   document.getElementById('demo.eval').className="disabled";
   setTimeout(function() { 
-			   BrowserLua.evalString(lua);
+			   var arg = [];
+			   "arg1 arg2 arg3".replace(
+				 /\w+(\d)/g,
+				 function(x,n)
+				 {
+				   var jsv = document.getElementById(x).value;
+				   arg[n*1-1] = jsv;
+				 });
+			   
+			   BrowserLua.evalString(lua, "=input", arg);
 			   document.getElementById('demo.eval').disabled=false;
 			   document.getElementById('demo.eval').className = "";
 			 }, 100);
@@ -253,7 +268,7 @@ td { padding:4px;vertical-align: top; font-size:.9em;font-family:helvetica; -moz
 button.disabled { background-color: #c66; }
 input { background-color: #ccc; border: solid 1px white; }
 .repl input { font-size: 1.2em; }
-#arg1, #arg2 { border: none;  }
+#arg1, #arg2, #arg3 { border: none;  }
 #demo_out { padding:0px;padding-top:6px; border: none; color: #6cc; font-size: .7em;}
 #commands input, #commands button { font-size: 1em; margin: 0px; padding: 0px; }
 	  a { text-decoration: none; color: #66c; }
@@ -279,6 +294,11 @@ input { background-color: #ccc; border: solid 1px white; }
 				onchange='this.onfocus=null;'
 				onfocus='this.onfocus=null;this.value="";'
 				/>
+			  <input tabindex="4" type='text' size='6' value='(arg 3)' 
+				id='arg3' 
+				onchange='this.onfocus=null;'
+				onfocus='this.onfocus=null;this.value="";'
+				/>
 
 			</div>
 		  </td></tr>
@@ -286,7 +306,7 @@ input { background-color: #ccc; border: solid 1px white; }
 			<input type='text' tabindex="1" style='width:70%;' id='demo.in' 
 			 value='for k,v in pairs(_G) do print(k,v) end'
 			 onkeyup='if (13 == ((arguments[0]||[]).keyCode||window.event.keyCode)) { evalcode(); return false; }'/>
-			  <button id='demo.eval' class='disabled' disabled='disabled' onclick='evalcode();return false;' tabindex="4" style='font-size: 1.2em;width:20%;'>go</button>
+			  <button id='demo.eval' class='disabled' disabled='disabled' onclick='evalcode();return false;' tabindex="5" style='font-size: 1.2em;width:20%;'>go</button>
 		  </td></tr>
 
 		<tr><th>

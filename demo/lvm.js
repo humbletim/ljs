@@ -9,7 +9,7 @@
 // EXAMPLE node: luac <input.lua> && node lvm.js
 // EXAMPLE browser: see demo.html
 
-var _VERSION = "Lua 5.1  {ljs=0.00111}"
+var _VERSION = "Lua 5.1  {ljs=0.00121}"
 
 // TODO: find a generic javascript logger
 // SEE: demo.html for browser stubs
@@ -112,7 +112,7 @@ LValue.prototype = {
 
 	  if(this.type == "table") {
 
-		if (0 > "string number nil".indexOf(key.type))
+		if (0 > "string number nil boolean".indexOf(key.type))
 		  throw "(TODO) ljs.table.index - sorry"+
 			", table key can't be this type yet:"+key.type;
 
@@ -131,6 +131,7 @@ LValue.prototype = {
 		-> DEBUG: t.length:2
 		*/
 
+		// number, nil, boolean -> string rep
 		// see: updated len() implementation
 		var kv = key.value.toString();
 
@@ -160,11 +161,15 @@ LValue.prototype = {
 		var kv = key.value;
 		if (key.type == 'number') kv = kv.toString();
 		if ( !raw && this.metatable &&  !_hasprop(this.value, kv)) {
+		  // key.type == 'boolean', 'nil', 'table', 'function'
+		  // all possible if forwarding to metamethod...
+		  if (0 > "string number".indexOf(key.type ))
+			sys.debug("(info) __newindex["+key.type+"]");
 		  var metamethod = this._getMeta("__newindex");
 		  if (metamethod)
 			return metamethod.call([this,key,value]);
 		}
-		// match 0 vs. 1 indexing
+		// treat numbers as a string index (like js does)
 		if (key.type == "number") {
 		  this.value[kv] = value;
 		}
@@ -202,7 +207,8 @@ LValue.prototype = {
 	{
 	  if (this.type == "nil") return "nil";
 	  if (this.type == "function") return "function: 0xLVM";
-	  
+	  if (this.type == "boolean") return this.truth().toString();
+
 	  var metamethod = this._getMeta("__tostring");
 	  if (metamethod)
 		return metamethod.call([this]).toString();
@@ -252,6 +258,7 @@ LValue.prototype = {
 			if(metamethod1.equals(metamethod2))
 			{
 				var result = metamethod1.call([this, op2]);
+				// ... return result[0].truth()?
 				return (result[0].type != "nil"
 					&& (result[0].type != "boolean" || result[0].value == true)
 				);
@@ -531,19 +538,35 @@ LVM.prototype = {
 
 		  if (this.callstack.length == 1 && frame.reg.length > 0) {
 			logOP_VARG("(verify) OP_VARG top-level workaround..."+
-					   frame.reg);
+					   frame.reg.length);
 			this._arg = args;
-			logOP_VARG("f.environment.value.arg..."+ 
-					   (f.environment.value.arg||null)+"/"+this._arg.length);
+// 			logOP_VARG("f.environment.value.arg..."+ 
+// 					   (f.environment.value.arg||null)+"/"+this._arg.length);
 
 			// note: make a copy, since this will re-index from 0-based to 1-based...
-			frame.f.environment.setIndex(
+			var arg = this.LValue(args.slice(0));
+			var old = frame.f.environment;
+			old.setIndex(
 			  this.LValue("arg"),
-			  this.LValue(args.slice(0))
+			  arg
 			);
+			
+// 			for(var i=frame.reg.length;i<f.maxStackSize;i++)
+// 			  frame.reg[i] = this.LValue();
 
 			var ret = this.run(frame);
 			this._arg = null;
+			if (old.value.arg == arg) {
+			  delete old.value.arg;
+			} else {
+			  for (var p in old.value.arg) 
+				sys.puts(p);
+			  sys.puts(old.value.arg);
+			  
+			  for (var p in arg.value) 
+				sys.puts(p+arg.value[p]);
+			  throw ".call emulated vararg mismatch" + arg;
+			}
 			return ret;
 		  }
 
@@ -634,14 +657,15 @@ LVM.prototype = {
 				var prevframe = this.callstack[this.callstack.length-2];
 				var base = frame.retAt+frame.f.numParameters;
 
-
 				// FIXME: workaround for top-level varargs (main program)
 				if (!prevframe && 
 					frame.entry == true 
 // 					&& this.callstack.length == 1 
 // 					&& this._arg
 				   ) {
-				  logOP_VARG("(verify) OP_VARARG patching top-level main chunk"+ this._arg +"#"+frame.reg.length);
+				  logOP_VARG("(verify) OP_VARARG "+
+							 "patching top-level main chunk"+ 
+							 this._arg +"#"+frame.reg.length);
 				  prevframe = { reg: this._arg || [] };
 				  base = -1; 
 				  frame.reg.length = A;
@@ -654,7 +678,6 @@ LVM.prototype = {
 				}
 
 				var available = (prevframe.reg.length - base) - 1;
-
 
 				if (prevframe.reg == this._arg)
 				  logOP_VARG("(verify) OP_VARARGs patched..."+sys.inspect(
@@ -823,20 +846,20 @@ LVM.prototype = {
 				frame.reg.length = A+3;
 				for(var i = 0; i<C; i++)
 					frame.reg[A+3+i] = rets[i];
-				if(frame.reg[A+3].type != "nil")
+				if(frame.reg[A+3] && frame.reg[A+3].type != "nil")
 					frame.reg[A+2] = frame.reg[A+3];
 				else
 					frame.pc++; // Skip JMP to start
 				continue;
 			case OP_TEST:
 				var RA = frame.reg[INS_A(instruction)];
-				var RA_bool = RA.type == "nil" || (RA.type == "boolean" && RA.value == false);
+				var RA_bool = !RA.truth();//RA.type == "nil" || (RA.type == "boolean" && RA.value == false);
 				if(RA_bool == (INS_C(instruction)!=0))
 					frame.pc++;
 				break;
 			case OP_TESTSET:
 				var RB = frame.reg[INS_B(instruction)];
-				var RB_bool = RB.type == "nil" || (RB.type == "boolean" && RB.value == false);
+				var RB_bool = !RB.truth();//RB.type == "nil" || (RB.type == "boolean" && RB.value == false);
 				if(RB_bool == (INS_C(instruction)!=0))
 					frame.pc++;
 				else
@@ -888,10 +911,14 @@ LVM.prototype = {
 			case OP_POW:
 				var RB = RK(frame, INS_B(instruction));
 				var RC = RK(frame, INS_C(instruction));
-				frame.reg[INS_A(instruction)] = new LValue(this, "number", Math.pow(RB.value, RC.value));
+				frame.reg[INS_A(instruction)] =
+				  new LValue(this, "number", Math.pow(RB.value, RC.value));
 				break;
 			case OP_UNM:
 				var RB = frame.reg[INS_B(instruction)];
+				if (RB.type != 'number')
+				  throw "attempt to perform arithmetic on ... "+
+					"(a "+RB.type+" value)";
 				frame.reg[INS_A(instruction)] = new LValue(this, "number", -RB.value);
 				break;
 			case OP_NOT:
@@ -913,6 +940,8 @@ LVM.prototype = {
 				var A = INS_A(instruction);
 				var RB = RK(frame, INS_B(instruction));
 				var RC = RK(frame, INS_C(instruction));
+				if (RB.type == 'table' || RC.type == 'table')
+				  throw "attempt to compare number with table";
 				if(RB.value < RC.value != (A!=0))
 					frame.pc++;
 				break;
@@ -920,6 +949,8 @@ LVM.prototype = {
 				var A = INS_A(instruction);
 				var RB = RK(frame, INS_B(instruction));
 				var RC = RK(frame, INS_C(instruction));
+				if (RB.type == 'table' || RC.type == 'table')
+				  throw "attempt to compare number with table";
 				if(RB.value <= RC.value != (A!=0))
 					frame.pc++;
 				break;
@@ -1020,10 +1051,12 @@ function openlibs(testvm) {
 	},
 	tostring: function(o)
 	{
+	  if (!o) throw "bad argument #1 to 'tostring' (value expected)";
 	  return [this.LValue(o.toString())];
 	},
 	tonumber: function(o)
 	{
+	  if (!o) throw "bad argument #1 to 'tonumber' (value expected)";
 	  var v = parseFloat(o.value);
 	  if (isNaN(v))
 		v = null;
@@ -1043,8 +1076,10 @@ function openlibs(testvm) {
 	{
 	  var curr = 0;
 	  var matches = [];
-	  if (t.type != 'table') 
-		throw "(fixme: match lua error description) pairs  called on non-table: "+t.type;
+	  t = t || { type:'no value' };
+
+	  if (t.type != 'table')
+		throw "bad argument #1 to 'pairs' (table expected, got "+t.type+")";
 	  
 	  for (var p in t.value) {
 		matches.push(p);
@@ -1069,11 +1104,13 @@ function openlibs(testvm) {
 	  return [this.LValue(m.value*Math.pow(2, e.value))];
 	},
 	frexp: function(x) {
-	  sys.debug("dependency: require('./misc/frexp')!");
-	  var em = require('./misc/frexp').frexp(x.value);
-	  //sys.debug(sys.inspect(["frexp(x)=",em.exponent,em.mantissa]));
+	  if (!math._frexp) {
+		sys.debug("dependency: require('./misc/frexp')!");
+		math._frexp = require('./misc/frexp').frexp;
+	  }
+	  var em = math._frexp(x.value);
 	  return [this.LValue(em.mantissa),this.LValue(em.exponent)];
-	  },
+	},
 	floor: function (x)
 	{
 		return [this.LValue(Math.floor(x.value))];
@@ -1173,7 +1210,7 @@ function openlibs(testvm) {
 	  var nArgs = arguments.length;
 	  if(nArgs != 1)
 		throw "ljs.string.byte(): only implemented single-char version...."+nArgs;
-	  return [this.LValue(s.value.charCodeAt(0))];
+	  return [this.LValue(s.toString().charCodeAt(0))];
 	},
 	"char": function ()
 	{
@@ -1195,6 +1232,9 @@ function openlibs(testvm) {
 	  if (str.type != 'string')
 		throw "bad argument #1 to 'find' (string expected, got "+str.type+")";
 
+	  if (patt.type != 'number' && patt.type != 'string')
+		throw "bad argument #2 to 'find' (string expected, got "+patt.type+")";
+
 	  var isplain = plain && plain.truth();
 	  var tstr = str.value;
 
@@ -1209,8 +1249,15 @@ function openlibs(testvm) {
 		
 	  var ret;
 	  if (isplain) {
-		re = new RegExp(patt.value.replace(/([\S\s])/g,'\\$1'), "g");
-		//sys.puts("(verify) string.find... plain mode!"+re);
+		var start = tstr.indexOf(patt.value);
+		if (start < 0)
+		  return [this.LValue(null)];
+		
+		return [this.LValue(start+1+offset),
+				this.LValue(start+patt.value.length+offset)];
+// 		re = new RegExp(patt.value.replace(/([\S\s])/g,'[$1]'), "g");
+// 		sys.puts("(verify) string.find... plain mode!"+re+"/"+tstr);
+// 		sys.debug(sys.inspect(re.exec(tstr)));
 	  } else {
 		re = _patternToRegExp(patt.value);
 	  }
@@ -1305,151 +1352,193 @@ function openlibs(testvm) {
 
   var modlog = sys.debug || function(){};//sys.puts
   var modlogV = sys.debug || function(){};//sys.puts
-  // yeah, javascript "with"... ;)
-  with(testvm.registerLib(_G, "package", { 
+  var package = testvm.registerLib(_G, "package", { 
 	seeall: "seeall",
 	loaded: [],
 	preload: []
-  })) { // cache the final lvalues
-	_G._packageloaded = index(testvm.LValue("loaded"));
-	_G._packagepreload = index(testvm.LValue("preload"));
-  };
-  
-  baselib.module = function(name, opt) {
-	modlog("emulating module('"+name+"', "+opt+")");
-	if (0) { // should be fixed now in OP_VARARG.. ?
-	  // FIXME: OP_VARARG (...) doesnt seem to work in main chunks
-	  //    but... the right data does seems to be there farther upstack
-	  if (name.type == 'nil' && this.callstack.length >= 2) {
-		var vargs = this.callstack[this.callstack.length-2].reg;
-		var dotdotdotseeall = this.callstack[this.callstack.length-1].reg;
-		if (dotdotdotseeall.length > 0) {
-		  opt = dotdotdotseeall[dotdotdotseeall.length-1];
-		  modlogV("(verify) found module(..., XYZ), XYZ="+opt);
-		}
-		name = vargs[vargs.length-1];
-		opt = vargs[vargs.length]||opt;
-		modlogV("(verify) emulated module(...): module('"+name+"', "+opt+")");
-	  }
-	}
+  });
+  // cache the final lvalues
+  _G._package_loaded = package.index(testvm.LValue("loaded"));
+  _G._package_preload = package.index(testvm.LValue("preload"));
 
+  //= module() -- faithfully implemented against lua.org manual -t
+  baselib.module = function(name, opt) {
 	if (!name || name.type != 'string') 
 	  throw "bad argument #1 to 'module' (string expected, got "+
 		(name?name.type:"no")+" value)"; 
 
-	// VERIFY: is this OK way to fetch _M via upstackvalue?
-	var _M = this.callstack[this.callstack.length-1].f.environment;
-	if (!_M._module_name)
-	  throw "lvm.js ... internal error retrieving _M above";
+	modlog("module('"+name+"', "+opt+")");
+	var package = { loaded: _G._package_loaded };
+	var G = this.callstack[this.callstack.length-1].f.environment;
+	if (G != _G)
+	  throw "ljs.module only supports top-level modules (_G == VM._G!)"
 
- 	if (!opt || opt.value != "seeall") {
-	  modlog("resetting _M environment (!seeall)..."+name);
-	  // nuke everything except for _M from global environment...
- 	  for (var p in _M.value) {
-		if (p != "_M") {
-		  delete _M.value[p];
-		}
- 	  }
+	/*= http://www.lua.org/manual/5.1/manual.html#5.3
+	   Copyright (c) 2006-2008 Lua.org, PUC-Rio [Lua license]
+	   module (name [, ...])
+	   Creates a module. */
+
+	/*= If there is a table in package.loaded[name],
+	        this table is the module. */
+	var t = package.loaded.index(name);
+
+	if (t.type == 'nil') {
+	  /*= Otherwise, if there is a global table t with the given name,
+          this table is the module.  */
+	  t = _G.index(name);
+	}
+	
+	if (t.type == 'nil') {
+	  /*= Otherwise creates a new table t
+		 and sets it as the value of the global name
+		 and the value of package.loaded[name]. */
+	  t = this.LValue([]);
+	  _G.setIndex(name, t);
+	  package.loaded.setIndex(name, t);
 	}
 
-	modlog("resetting module name..."+name);
-	_M._module_name = name
+	/*= This function also initializes t._NAME with the given name, 
+	   t._M with the module (t itself),
+	   and t._PACKAGE with the package name 
+	   (the full module name minus last component; see below).  */
+
+	t.setIndex(this.LValue("_NAME"), name);
+	t.setIndex(this.LValue("_M"), t);
+	//= TODO: t.setIndex(this.LValue("_PACKAGE", ...
+
+	/*= Finally, module sets t as the new environment of the current function
+      and the new value of package.loaded[name], so that require returns t.*/
+	
+	this.callstack[this.callstack.length-1].f.environment = t;
+
+	package.loaded.setIndex(name, t);
+
+	/*= TODO: If name is a compound name (that is, one with components separated by dots), module creates (or reuses, if they already exist) tables for each component. For instance, if name is a.b.c, then module stores the module table in field c of field b of global a. */
+
+	/*= TODO: This function can receive optional options after the module
+	  name, where each option is a function to be applied over the module. */
+
+	if (opt && opt.type != 'nil' && opt.value != 'seeall')
+	  throw "ljs.module: package.seeall only supported"+
+		" (optional) second parameter to module() ["+opt+"]";
+
+	//= /lua.org
+
+	// VERIFY: does lua copy values over as well?
+ 	if (opt && opt.value == "seeall") {
+	  for (var p in _G.value) {
+		//sys.puts("_G."+p+" -> _M."+p);
+		p = this.LValue(p);
+		t.setIndex(p, _G.index(p));
+	  }
+	}
 
 	return [];
   };
 
-  baselib.require = function (name) {
-	var _M = _G._packageloaded.index(name);
-	if (_M.type != 'nil')
-	  return [_M];
+  // require() -- faithfully implemented against lua.org manual -t
+  baselib.require = function (modname) {
+	var package = { loaded: _G._package_loaded,
+				    preload: _G._package_preload};
+	
+	/*= http://www.lua.org/manual/5.1/manual.html#pdf-require
+	   Copyright (c) 2006-2008 Lua.org, PUC-Rio [Lua license]
+	   require (modname)
 
-	var f = _G._packagepreload.index(name);
-	modlog("package.preload["+name+"] == "+f+"\n");
-	if (f.type != 'nil') {
-	  _M = this.LValue([]);
-	  testvm.registerLib(_M, null, baselib);
-	  for (var p in _G.value) {
-		//sys.puts("_G."+p+" -> _M."+p);
-		p = this.LValue(p);
-		_M.setIndex(p, _G.index(p));
-	  }
-	  _M.setIndex(this.LValue("_M"), _M);
+	   Loads the given module. */
 
-	  _M._module_name = name; // internal flag
+	/*= The function starts by looking into the package.loaded table to
+	   determine whether modname is already loaded. */
+	
+	var value = package.loaded.index(modname);
 
-	  //	  f.environment = _M;
+	/*= If it is, then require returns the value stored at
+	    package.loaded[modname]. */
 
-	  // FIXME: passing second parameter of _M not to spec
-	  // but not sure how to get this to javascript _setpreload otherwise..
-	  var loaded = this.call(f, [name,_M])[0] || this.LValue(null);
+	if (value.type != 'nil')
+	  return [value];
 
-	  if (loaded) {
-		// 		sys.print("_M now"+_M);
-		// 		sys.print("loaaded:"+loaded);
-		if (_M._module_name != name) 
-		  modlogV("(verify) require'"+name+"'"+
-				   ", but module'"+_M._module_name+"'");
+	/*=	Otherwise, it tries to find a loader for the module. */
 
-		// http://www.lua.org/manual/5.1/manual.html#5.3
-		if (loaded.type == 'nil') {
-		  modlogV("(verify) no module return value, using package.loaded.");
-		  loaded = _G._packageloaded.index(name);
-		}
-		if (loaded.type == 'nil') {
-		  modlogV("(verify) no package.loaded, so setting to true...");
-		  loaded = this.LValue(true);
-		}
-		modlog("package.loaded["+name+"] = "+loaded+"!\n");
-		_G._packageloaded.setIndex(name, loaded);
+	/*= TODO: To find a loader, require is guided by the package.loaders array. By changing this array, we can change how require looks for a module. The following explanation is based on the default configuration for package.loaders. */
 
-		name = _M._module_name;
+	/*= First require queries package.preload[modname]. 
+	    If it has a value,
+     	   this value (which should be a function) is the loader. */
+	
+	var loader = package.preload.index(modname);
 
-		modlog("_G["+name+"] = "+_M+"!\n");
-		_G.setIndex(name, _M)
+	if (loader.type == 'nil') {
+	  /*= TODO: Otherwise require searches for a Lua loader using the path stored in package.path. If that also fails, it searches for a C loader using the path stored in package.cpath. If that also fails, it tries an all-in-one loader (see package.loaders). */
 
-		_M.setIndex(this.LValue("_NAME"), name);
-		//TODO: _M._PACKAGE?
+	  throw "module '"+modname+"' not found:\n"+
+		"\tno field package.preload['"+modname+"']";
+	}
 
-		return [loaded];
+	/*= Once a loader is found,
+    	   require calls the loader with a single argument, modname. */
+
+	var retval = loader.call([modname])[0];
+
+	/*= If the loader returns any value,
+    	   require assigns the returned value to package.loaded[modname]. */
+	if (retval)
+	  package.loaded.setIndex(modname, retval);
+	else {
+	  /*= If the loader returns no value 
+		   and has not assigned any value to package.loaded[modname],
+     		 then require assigns true to this entry. */
+	  if (package.loaded.index(modname).type == 'nil') {
+		package.loaded.setIndex(modname, this.LValue(true));
 	  }
 	}
-	throw "module '"+name+"' not found:\n"+
-	      "\tno field package.preload['"+name+"']";
+
+	/*= In any case,
+    	   require returns the final value of package.loaded[modname]. */
+	return [package.loaded.index(modname)];
+
+	/*= If there is any error loading or running the module,
+         or if it cannot find any loader for the module,
+	      then require signals an error. */
+	//= /lua.org
   };
+
+  // helper function to mount js-side loaders
   testvm._setpreload = function(name, loader) {
-	var domod = this.LValue(function(name, M) {
-							  return [loader.apply(M,[name.value,M])];
-							});
-	_G._packagepreload.setIndex(this.LValue(name), 
-								domod);
+	_G._package_preload.setIndex(
+	  this.LValue(name),
+	  this.LValue(function(name) {
+					return [loader(name.value)];
+				  }));
   };
   // -----------------------------------------------------
 	
   testvm.registerLib(_G, null, baselib);
   testvm.registerLib(_G, "math", math);
   testvm.registerLib(_G, "io", {
-	open: function() { 
-						 throw "io.open -- not available";
-						 
-					   } ,
+	open: function() { throw "io.open -- not available"; },
 	write: function() {
 						 for (var i=0; i < arguments.length; i++)
-						   sys.print(arguments[i].toString())
+						   sys.print(arguments[i].toString());
 						 return [];
 					   }
   });
 
   testvm.registerLib(_G, "table", {
-	concat: function(t,s) {
-						 if (t.type != 'table') throw "(fixme: match lua error description) table.concat not table:"+t.type;
-						 if (!s || s.type != 'string') throw "(fixme: match lua error description) table.concat not string:"+(s&&s.type);
-						 
-						 var ret = [];
-						 for (var p=1; p <= t.len(); p++) {
-						   ret.push(t.value[p].value);
-						 }
-						 return [this.LValue(ret.join(s.value))];
-					   }
+	concat: function(t,s)
+	{
+	  if (t.type != 'table')
+		throw "bad argument #1 to 'concat' (table expected, got "+t.type+")";
+	  if (!s || s.type == 'nil')
+		s=this.LValue("");
+	  if (s.type != 'string' && s.type != 'number')
+		throw "bad argument #2 to 'concat' (string expected, got "+s.type+")";
+	  var ret = [];
+	  for (var p=1; p <= t.len(); p++) {
+		ret.push(t.value[p].value);
+	  }
+	  return [this.LValue(ret.join(s.toString()))];
+	}
   });
   testvm.registerLib(_G, "string", string);
   _G.setIndex(testvm.LValue("_G"), _G);
@@ -1489,7 +1578,7 @@ if (typeof process != 'undefined') { // node
 		function(x) {
 		  //sys.puts("io.open"+x)
 		  // FIXME: insecure, should formally sandbox even for testing
-		  if (x.type != "string" || !/^tests\/pass\//.test(x.value))
+		  if (x.type != "string" || !/^tests\/(pass|fail)\//.test(x.value))
 			throw "io.open dummy imp -- unexpected: "+x;
 		  var ret = this.LValue([]);
 		  ret.setIndex(this.LValue("read"),
@@ -1509,19 +1598,20 @@ if (typeof process != 'undefined') { // node
 
 	// ----------------------------------------------------------------------
 	// TODO: could automatically compile .lua to bytecode for node version...
-	var _loadmodule = function(nm, M) {
-	  sys.debug("_loadmodule..."+nm+M);
+	var _loadmodule = function(nm) {
+	  sys.debug("_loadmodule..."+nm+_G);
 	  var m = testvm.loadstring(fs.readFileSync(nm+".luac", 
-												"binary"), M);
+												"binary"), _G);
 	  return m.call([testvm.LValue(nm)])[0];
 	}
 	// -----------------------------------
 
+	testvm._setpreload("testmodule", _loadmodule);
 	if (0) {
 	  testvm._setpreload("yueliang", _loadmodule);
 	  _G.value.require.call([testvm.LValue("yueliang")]);
 	  _G.value.math.setIndex(testvm.LValue("frexp"),
-							 _G._packageloaded.index(
+							 _G._package_loaded.index(
 							   testvm.LValue("./misc/frexp")
 							 ).index(testvm.LValue("frexp")));
 	}
