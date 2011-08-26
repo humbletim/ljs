@@ -3,15 +3,19 @@
 all: demo.html
 
 demo.html: demo.lua.output.html \
-	       	demo.luac.js demo.lua.src.html
+	       	demo.luac.js demo.lua.src.html \
+	                testmodule.luac.js \
+		            testmodule.lua.src.html 
 #			yueliang.luac.js
-#                 testmodule.luac.js testmodule2.luac.js \
-#	             testmodule.lua.src.html testmodule2.lua.src.html
 
-demo.luac.js: demo.lua
-	# $< = demo.lua, $@ = demo.luac.js
-	luac -o $<c $<
-	lua util/luac2js.lua $<c > $@
+%.luac: %.lua
+	luac -o $@ $<
+
+%.luac.js: %.luac
+	lua util/luac2js.lua $< > $@
+
+%.lua.src.html: %.lua
+	  perl util/lua2html.pl $< > $@
 
 demo.lua.output.html: demo.lua
 	( echo "<pre style='font-size:.9em'>" ; make -s lua-run ; \
@@ -21,13 +25,9 @@ demo.lua.output.html: demo.lua
 #	nl -ba -nrz -w 3 -s "]] " $< |sed -e 's/^/--[[/'  | \
 #	  perl util/lua2html.pl > $@
 
-demo.lua.src.html: demo.lua
-	  perl util/lua2html.pl $< > $@
 
 # this approximates web browser test, using ndoe
-node-run:
-	luac -o testmodule.out testmodule.lua
-	luac -o testmodule2.out testmodule2.lua
+node-run: testmodule.luac
 	luac -o luac.out demo.lua
 	node lvm.js '(arg 1)' '(arg 2)'
 
@@ -60,41 +60,55 @@ pretest:
 	   do lua $$x >/dev/null || exit; done \
 	   && echo lua tests/pass/\*.lua ran OK'
 
-# run legacy node-based test framework
+# run node-based test framework
 test: pretest
 	bash tests/run.sh
 
 clean:
-	rm -vf demo.luac testmodule.luac testmodule2.luac
-	rm -vf demo.luac.js testmodule.luac.js testmodule2.luac.js
+	rm -vf *.luac *.luac.js 
 	rm -vf demo.lua.output.html
-	rm -vf demo.lua.src.html testmodule.lua.src.html testmodule2.lua.src.html
-	rm -vf luac.out testmodule.out testmodule2.out
+	rm -vf demo.lua.src.html testmodule.lua.src.html 
+	rm -vf luac.out _yueliang.lua _modluac.lua
 
 ##### experimenting with yueliang...
-testdump:
-	( cd ../yueliang-0.4.1/orig-5.1.3 && \
-		cat lopcodes.lua ldump.lua \
-	 test/test_ldump.lua ) | sed -e 's/^dofile/--dofile/g' > testdump.lua
+#testdump:
+#	( cd ../yueliang-0.4.1/orig-5.1.3 && \
+#		cat lopcodes.lua ldump.lua \
+#	 test/test_ldump.lua ) | sed -e 's/^dofile/--dofile/g' > testdump.lua
 
-yueliang.luac: misc/mluac.lua misc/frexp.lua
-	( ( cd ../yueliang-0.4.1/orig-5.1.3 && \
-	cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua ) ; \
-	cat misc/frexp.lua misc/mluac.lua ) | sed -e 's/^dofile/--dofile/g' > yueliang.lua
-	luac -s -o yueliang.luac yueliang.lua
+yueliang.luac: _yueliang.lua
+	@echo "making stripped $@"
+	luac -s -o $@ $<
 
-modluac: misc/yluac.lua
-	( ( cd ../yueliang-0.4.1/orig-5.1.3 && \
-	cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua ) ; \
-	cat misc/yluac.lua ) | sed -e 's/^dofile/--dofile/g' > modluac.lua
-	luac modluac.lua
-
-ytest: modluac
-	bash -c 'for x in tests/pass/*.lua ; do \
-		  node lvm.js $$x 2>/dev/null > $$x.yluac || ( echo "FAIL(compile): $$x" && cat $$x.yluac && rm $$x.yluac ) ; \
-		   [ -e $$x.yluac ] && ( lua $$x.yluac 2>/dev/null >/dev/null || echo "FAIL(lua): $$x" && rm $$x.yluac ) ; \
-	done'
-
-##### experimenting with modules
 yueliang.luac.js: yueliang.luac
 	lua util/luac2js.lua $< > $@
+
+_yueliang.lua: misc/mluac.lua misc/frexp.lua
+	( echo '-- composited yueliang.lua @ ' `date -u` ; \
+	  echo 'module(..., package.seeall)' ; \
+	   ( cd ../yueliang-0.4.1/orig-5.1.3 && \
+        cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua \
+       ) ; \
+	  cat misc/frexp.lua misc/yueliang_patch.lua misc/mluac.lua \
+    ) | sed -e 's/^dofile/--dofile/g' > _yueliang.lua
+
+_modluac.lua: misc/yluac.lua misc/yueliang_patch.lua
+	( \
+	  ( cd ../yueliang-0.4.1/orig-5.1.3 && \
+		cat lzio.lua llex.lua lopcodes.lua ldump.lua lcode.lua lparser.lua \
+	  ) ; \
+	  cat misc/yueliang_patch.lua misc/yluac.lua \
+	) | sed -e 's/^dofile/--dofile/g' > _modluac.lua
+
+modluac: _modluac.lua
+	luac _modluac.lua
+	@echo "luac.out is now yueliang-compiler"
+
+# TODO: yueliang needs separate test script, but for now...
+ytest: modluac
+	bash -c 'set -e ; for x in tests/pass/*.lua tests/fail/*.lua ; do \
+		  node lvm.js $$x 2>/dev/null > $$x.yluac && echo "[ compiled (ljs) ] $$x!" || ( echo "FAIL(compile): $$x" && cat $$x.yluac && rm $$x.yluac ) ; \
+		   [ -e $$x.yluac ] && ( ( lua $$x.yluac 2>/dev/null >/dev/null \
+	         && echo "[ ran (`which lua`) ] $$x.yluac" ) || echo "FAIL(`which lua`): $$x" && rm $$x.yluac ) ; \
+	done'
+

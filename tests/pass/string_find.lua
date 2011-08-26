@@ -1,3 +1,7 @@
+assert(not string.find(".", "B", 1,1))
+local two, three = string.find("asdf","sd",nil,true)
+assert(two == 2 and three == 3)
+
 assert(1 == string.find("asd.f", "."),  string.find("asd.f", "."))
 assert(3 ==  string.find("asd.f", ".", 3))
 assert(4 == string.find("asd.f", ".", 3, true))

@@ -67,12 +67,7 @@ var stubs = {
 // -- /NODE --
 </script>
 
-<!-- ... BrowserLua.provideFile("yueliang.luac", "<bytecode>") 
-<script type="text/javascript" src="yueliang.luac.js"></script>
--->
-<!-- frexp.js (still haven't decided where to/if to inline this somewhere) 
-<script type="text/javascript" src="misc/frexp.js"></script>
--->
+<script type="text/javascript" src="testmodule.luac.js"></script>
 
 <!-- Lua VM -->
 <script type="text/javascript" src="lvm.js"></script>
@@ -92,7 +87,7 @@ BrowserLua.init = function() {
   BrowserLua.VM = new LVM();
   BrowserLua._G = openlibs(BrowserLua.VM);
 
-  BrowserLua._loadmodule = function(NAME, _M) {
+  BrowserLua._loadmodule = function(NAME) {
 	//	console.warn("_loadmodule", arguments);
 
 	// note: NAME will be require'NAME'
@@ -100,14 +95,14 @@ BrowserLua.init = function() {
 	if (!bytecode) throw "no file '"+NAME+".luac"+"'";
 	var m = BrowserLua.VM.loadstring(
 	  bytecode,
-	  _M
+	  BrowserLua._G
 	);
-	var ret = this.vm.call(m, [this.vm.LValue(NAME)]); // calls main chunk
+	var ret = BrowserLua.VM.call(m, [BrowserLua.VM.LValue(NAME)]); // calls main chunk
 	//	console.warn("ret:",ret);
 	return ret[0];
   };
 
-  BrowserLua.VM._setpreload("yueliang", BrowserLua._loadmodule);
+  BrowserLua.VM._setpreload("testmodule", BrowserLua._loadmodule);
 
   // hmmm
   BrowserLua._pcall = function(jsfunc) {
@@ -319,6 +314,7 @@ function dump_G() {
 			  /*else document.location.hash = 'codes';*/
 			  ">
 			  <code>demo.lua</code>
+			  <code>testmodule.lua</code>
 			</div>
 			<iframe id='demo.lua' src="demo.lua.src.html"></iframe>
 		  </td></tr>
