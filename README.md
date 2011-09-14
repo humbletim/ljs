@@ -1,13 +1,21 @@
 # ljs - Lua VM implemented in Javascript
 
-note: bytecode interpreter only
+[DEMO #1](http://humbletim.github.com/ljs/demo/demo.html) 
+ - ljs w/precompiled sample
+
+[DEMO #2](http://humbletim.github.com/ljs/demo/inbrowser.html)
+ - ljs + precompiled [yeuliang](http://yueliang.luaforge.net/)
+ 
+[DEMO #3](http://humbletim.github.com/ljs/demo/codemirror.html)
+ - ljs + precompiled [yeuliang](http://yueliang.luaforge.net/) + [codemirror](http://codemirror.net) editor 
+
+note: ljs is bytecode interpreter only
 (.lua scripts must be compiled to .luac in advance)
+(yeuliang is lua compiler in lua)
 
 originally *ljs-16b833862ae2* from mecurial
   http://code.matthewwild.co.uk/ljs/ :: 
   [16b833862ae2](http://code.matthewwild.co.uk/ljs/rev/16b833862ae2)
-
-DEMO: http://humbletim.github.com/ljs/demo/demo.html
 
 ### roadmap:
 
@@ -19,8 +27,7 @@ DEMO: http://humbletim.github.com/ljs/demo/demo.html
  * [done -- tested in IE6, FF, Chrome, WebKit, Opera]
 3. experiment with some [BrowserLua](https://github.com/agladysh/browser-lua) 
    concepts
- * [attempted -- but may not make sense without working doString, etc. 
-   (remember, no compiler, ljs just runs bytecode)]
+ * [attempted]
 4. make a sandbox'd cgi-bin that takes lua code as input and emits js-encoded
    bytecode (text/javascript)
 5. ... that's it for now!
@@ -42,6 +49,10 @@ DEMO: http://humbletim.github.com/ljs/demo/demo.html
  *  .luac *(compiled bytecode)* 
  *  .luac.js *(encoded bytecode as html script include)* 
  *  .lua.src.html *(pretty source for browser)* 
+
+### to build precompiled yeuliang bootstrapping
+    # download & extract yeuliang-0.4.1.tar.gz into sibling dir
+    make yeualiang.luac.js
 
 #### dependencies
 
