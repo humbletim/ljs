@@ -13,10 +13,6 @@ note: ljs is bytecode interpreter only
 (.lua scripts must be compiled to .luac in advance)
 (yeuliang is lua compiler in lua)
 
-originally *ljs-16b833862ae2* from mecurial
-  http://code.matthewwild.co.uk/ljs/ :: 
-  [16b833862ae2](http://code.matthewwild.co.uk/ljs/rev/16b833862ae2)
-
 ### roadmap:
 
 1. put together an example of how to go from lua source code to js-encoded
@@ -52,7 +48,7 @@ originally *ljs-16b833862ae2* from mecurial
 
 ### to build precompiled yeuliang bootstrapping
     # download & extract yeuliang-0.4.1.tar.gz into sibling dir
-    make yeualiang.luac.js
+    make yeuliang.luac.js
 
 #### dependencies
 
@@ -62,6 +58,11 @@ make all: lua / luac (tested with 5.1.4),
   node (for running tests)
 
 #### history
+
+originally *ljs-16b833862ae2* from mecurial
+  http://code.matthewwild.co.uk/ljs/ :: 
+  [16b833862ae2](http://code.matthewwild.co.uk/ljs/rev/16b833862ae2)
+
 
 On Tue, Jul 20, 2010 at 13:16, Matthew Wild [wrote](http://lua-users.org/lists/lua-l/2010-07/msg00569.html):
 
