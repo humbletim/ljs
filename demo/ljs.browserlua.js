@@ -136,7 +136,7 @@ BrowserLua.init = function() {
  		}
 		//process.exit(1);
 		this.VM.callstack = [];
-	  } catch(e) { alert(e) };
+	  } catch(e) { alert('_pcall:'+e) };
 	  //throw e;
 	}
   };
@@ -176,7 +176,10 @@ BrowserLua.init = function() {
 	var lfunc = this._G.index(this.VM.LValue(functionName));
 	var largs = [];
 	for (var i=1; i < arguments.length; i++)
-	  largs.push(this.VM.LValue(arguments[i]));
+	  largs.push(typeof arguments[i] != 'object' ?
+				 this.VM.LValue(arguments[i]) :
+				 arguments[i]);
+	//	console.warn("calling", functionName, largs);
 	var ret = this.VM.call(lfunc, largs);
 	var jsret = [];
 	for (var i=0; i < ret.length; i++)
@@ -202,7 +205,7 @@ BrowserLua.init = function() {
 	for (var i=0;i < arguments.length; i++)
 	  args[i] = arguments[i].value;
 	var ret = func.apply(this, args);
-	for (var i=0;i < ret.length; i++)
+	for (var i=0;ret && i < ret.length; i++)
 	  ret[i] = this.LValue(ret[i]);
 	return ret;
   };

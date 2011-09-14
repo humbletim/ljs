@@ -1,0 +1,420 @@
+
+<html>
+  <head>
+	<title>Lua VM in Javascript demo + Yeuliang Compiler</title>
+	<meta id="viewport" name="viewport"
+	  content="width=device-width; xheight=device-height; user-scalable=1; initial-scale=1.0; minimum-scale=0.25; maximum-scale=2.0; " />
+
+	<script type="text/javascript">
+
+// ljs codemirror.html -- Lua VM in Javascript test page w/CodeMirror editor
+
+// ljs Released under MIT/X11 license
+// Copyright (C) 2011 Tim Dedischew
+// Copyright (c) 2010 Matthew Wild
+// see: https://github.com/humbletim/ljs
+// see: http://code.matthewwild.co.uk/ljs/
+
+// yueliang.luac.js (MIT/X11)
+// Yueliang Copyright (C) 2005-2008 Kein-Hong Man
+// Lua 5.0.3 Copyright (C) 2003-2006 Tecgraf, PUC-Rio.
+// Lua 5.1.3 Copyright (C) 1994-2008 Lua.org, PUC-Rio.
+// see: http://yueliang.luaforge.net/
+
+// frexp.java (CC BY-SA 3.0) http://stackoverflow.com/faq#editing
+// .lua/.js port of http://stackoverflow.com/questions/1552738/is-there-a-java-equivalent-of-frexp/1562857#1562857
+// original author: http://stackoverflow.com/users/122428/jitter
+// ported by http://github.com/humbletim/ljs
+
+// BrowserLua (MIT)
+// (concept by Alexander Gladysh)
+// Copyright (C) 2010 Browser-Lua authors
+// see: https://github.com/agladysh/browser-lua
+
+// CodeMirror2
+// Copyright (C) 2011 by Marijn Haverbeke
+// see: http://codemirror.net/
+
+var times = {
+  start: new Date().getTime()
+};
+
+</script>
+
+<!-- CodeMirror stuff --> 
+    <link rel="stylesheet" href="CodeMirror/codemirror.css">
+    <script                 src="CodeMirror/codemirror-compressed.js"></script>
+    <link rel="stylesheet" href="CodeMirror/cobalt.css">
+    <style>
+		  /* .CodeMirror-scroll { height: 100px; } */
+.CodeMirror-scroll {
+  height: auto;
+  overflow-y: hidden;
+  overflow-x: auto;
+  width: 100%
+}
+		  .CodeMirror {border: 1px solid black;}
+		</style>
+<!-- /CodeMirror stuff -->
+
+<script type="text/javascript">
+
+// -- NODE-like stubs (most logging done this way right now) --
+var stubs = {
+  sys: {
+	_printbuf: "",
+	_outputline: function(s) { 
+	  console.log("sys._outputline: "+s);
+	},
+	puts: function() { stubs.sys.print(Array.prototype.slice.call(arguments)+"\n"); },
+// 	log: function(s) { stubs.sys.puts(new Date()+": "+s);},
+	print: function(s) { 
+	  // emulate node(-specific?) sys.print behaviour for lvm.js
+	  if (/\n/.test(s)) {
+		stubs.sys._outputline(stubs.sys._printbuf+s);
+		stubs.sys._printbuf = "";
+	  } else
+		stubs.sys._printbuf += s;
+	},
+	inspect: function(s) { return s ; }
+  }
+};
+
+/*javascript: global*/ require = function(it) {
+  return (stubs)[it];
+};
+// -- /NODE --
+</script>
+
+<!-- ljs.BrowserLua -->
+<script type="text/javascript" src="ljs.browserlua.js"></script>
+
+<!-- ... BrowserLua.provideFile("yueliang.luac", "<bytecode>") -->
+<script type="text/javascript" src="yueliang.luac.js"></script>
+
+<!-- Lua VM -->
+<script type="text/javascript" src="lvm.js"></script>
+
+<script type="text/javascript">
+
+var demo_out_default = "";
+function clearoutput() { 
+  _HTML = "";
+  domoutput();
+  document.getElementById("demo_out").innerHTML = demo_out_default;
+}
+
+var _HTML = "";
+var _out;
+var _eol =  /msie/i.test(navigator.userAgent) ? "<br />" : "";
+var _CR = /\n$/;
+var _updateto = 0;
+
+function _domsync() {
+  _updateto=0;
+  _out.innerHTML = _HTML;
+  _out.scrollTop=_out.scrollHeight-_out.clientHeight;
+}
+
+function domoutput(s){
+  _out = _out || document.getElementById('output');
+  if (s)
+	_HTML += s + (!_CR.test(s)?"<br />":_eol);
+  clearTimeout(_updateto);
+  _updateto = setTimeout(_domsync, 100);
+}
+
+if (typeof console == 'undefined') {
+  console={
+	warn:function(){ domoutput('(warn)'+Array.prototype.slice.call(arguments)+''); },
+	 log:function(){ domoutput('(log)'+Array.prototype.slice.call(arguments)+''); }
+  };
+}
+
+// run the test bytecode
+function browtest() {
+//   var old = BrowserLua._setoutput(domoutput);
+//   BrowserLua._pcall(
+// 	function(){
+// 	  BrowserLua.evalString("print(_VERSION)");
+// 	});
+//   BrowserLua._setoutput(old); // i do a lot of testing from Firebug, so reset
+  evalcode("print(_VERSION)");
+}
+
+var xtra = 8;
+function handlrewidth() {
+  window.onresize = null;
+  setTimeout(function() {
+			   if ((window.innerWidth||document.body.clientWidth) != window._lastWidth) {
+				 window._lastWidth = window.innerWidth||document.body.clientWidth;
+				 var trs = document.getElementsByTagName("tr");
+				 var fill = document.getElementById('height_setter');
+				 var filltr = fill.parentNode;
+				 var fiftyp = document.getElementById('fiftyp');
+				 var h = fiftyp.clientHeight - trs.length*8 - 4;
+				 h -= xtra;
+				 for (var i=0; i < trs.length; i++)
+				   if (trs[i] != filltr) 
+					 h -= trs[i].firstChild.clientHeight;
+				 //domoutput("width:"+window._lastWidth+"/"+h);
+				 fill.height = h > 200 ? h : 200;
+			   }
+			   setTimeout(function() { 
+							if (_out) _out.scrollTop=_out.scrollHeight-_out.clientHeight;
+							window.onresize = handlrewidth;
+						  }, 100);
+			 }, 100);
+}
+window.onresize = handlrewidth;
+  
+var editor;
+
+window.onload = function() {
+  if (!/mobile/i.test(navigator.userAgent)) {
+  // codemirror
+  editor = CodeMirror.fromTextArea(document.getElementById("demo.in"), {
+	tabMode: "indent",
+	matchBrackets: true,
+	theme: "cobalt",
+	lineNumbers: true,
+	onBlur: function() { window._lastWidth=-1;window.handlrewidth();return false; }
+  });
+  var div = document.createElement("div");
+  div.innerHTML="<div style='float:right'><a href ='http://codemirror.net/' style='font-size:.8em;color:#c77;' target='_blank'>editor: CodeMirror2</a></div>";
+  document.forms[0].appendChild(div.firstChild);
+  // /codemirror
+  } else {
+	xtra =0;
+	editor = {
+	  getValue: function() {
+		return document.getElementById("demo.in").value;
+	  }
+	};
+  }
+
+  demo_out_default = document.getElementById("demo_out").innerHTML;
+  domoutput("initializing..."+navigator.userAgent.substring(0,50)+"...");
+  if (/opera/i.test(navigator.userAgent))
+	document.body.className = 'opera';
+  if (window.onresize && window.handlrewidth) handlrewidth();
+
+  setTimeout(function() { 
+			   if (typeof times == 'object') {
+				 times.pagestart = times.start;
+				 times.start = new Date().getTime();
+			   }
+			   BrowserLua.init();
+			   BrowserLua._G.setIndex(BrowserLua.VM.LValue("clear"),
+									  BrowserLua.VM.LValue(function(){clearoutput();return [];}));
+			   BrowserLua._init_evalString();
+			   document.getElementById('demo.eval').disabled=false;
+			   document.getElementById('demo.eval').className = "";
+			   BrowserLua._evalString = BrowserLua.evalString;
+			   BrowserLua.evalString = function() {
+				 var start = new Date().getTime();
+				 BrowserLua.VM.OPS = 0;
+				 BrowserLua._evalString.apply(BrowserLua, arguments);
+				 var now = new Date().getTime();
+				 var nOPS = (BrowserLua._lastdoOPS+BrowserLua._lastcompileOPS);
+				 var OPS = nOPS + " OPS";
+				 if (nOPS > 999)
+				   OPS = Math.round(nOPS/100)/10 +" kOPS";
+				 var html = (now - start)+ " ms ("+
+				 (BrowserLua._lastcompileOPS ? Math.round(BrowserLua._lastcompilems / (BrowserLua._lastcompilems+BrowserLua._lastdoms) *10000)/100 +"% compiling" : "cached bytecode")+
+				 ")"+
+				 " ; " + OPS +
+				 (BrowserLua._lastcompileOPS  ? " ("+Math.round(BrowserLua._lastcompileOPS / BrowserLua.VM.OPS*10000)/100 +"% compiling)" : "");
+				 if (/mobile/i.test(navigator.userAgent))
+				   html = html.replace(/compiling/g,'parse');
+				 document.getElementById("demo_out").innerHTML = html;
+				 //	if (typeof console == 'object') console.warn(BrowserLua._lastcompilems + "ms compiling, "+BrowserLua._lastdoms+" ms running");
+			   }
+
+			   if (typeof times == 'object') {
+				 times.now = new Date().getTime();
+				 var bystamp = [];
+				 var revmap = {};
+				 for (var p in times) {
+				   if (p == 'start') continue;
+				   times[p] += Math.random()/100; // uniquify, jic
+				   bystamp.push(times[p])
+					 revmap[times[p]] = p;
+				 }
+				 bystamp.sort();
+				 for (var i=0; i < bystamp.length; i++) {
+				   var ms = Math.round(bystamp[i] - times.start);
+				   var sms = Math.abs(ms)+"";
+				   while (sms.length < 4) sms = " "+sms;
+				   sms = (ms < 0 ? '-' : '+') + sms;
+				   domoutput("<i>"+sms+" ms, "+revmap[bystamp[i]]+"</i>");
+				 }
+				 times=0;
+			   }
+
+			   setTimeout(browtest, 100);
+			 }, 200);
+};
+
+function dump_G() {
+  domoutput("----------------");
+  domoutput("dumping _G");
+  domoutput("----------------");
+  for (var p in BrowserLua._G.value) {
+	var v =  BrowserLua._getglobal(p);
+	domoutput(p+"\t"+(v&&v.type));
+  }
+//   domoutput("----------------");
+//   domoutput("dumping _G.package.loaded");
+//   domoutput("----------------");
+//   var loaded =  BrowserLua._G.value.package.value.loaded.value;
+//   for (var p in loaded)
+// 	domoutput(p+"\t"+ loaded[p].type);
+}
+function evalcode(lua) {
+  lua = lua || editor.getValue();
+  document.getElementById('demo.eval').disabled=true;
+  document.getElementById('demo.eval').className="disabled";
+  setTimeout(function() { 
+			   var arg = [];
+			   "arg1 arg2 arg3".replace(
+				 /\w+(\d)/g,
+				 function(x,n)
+				 {
+				   var jsv = document.getElementById(x);
+				   if (jsv) 
+					 arg[n*1-1] = jsv.value;
+				 });
+			   
+			   BrowserLua.evalString(lua, "=input", arg);
+			   document.getElementById('demo.eval').disabled=false;
+			   document.getElementById('demo.eval').className = "";
+			 }, 100);
+
+}
+
+</script>
+
+  </head>
+  <body>
+	<style type="text/css">
+	  err { color:#f33; font-weight:bold; }
+	  body { color:#fff; background-color: #111; font-family: helvetica; margin:2px;}
+	  table { border-color: #aaa; background-color:#333;-moz-border-radius: 15px;border-radius: 15px; padding:8px; margin: 1px;}
+#output { overflow:auto; width:100%;margin:0px;padding:0px;overflow-y:scroll;height:100%; font-family:monospace;}
+.opera table { font-size: 2em; }
+td { padding:4px;vertical-align: top; font-size:.9em;font-family:helvetica; -moz-border-radius: 8px;border-radius:8px; width:100%; overflow-x:hidden;}
+	  iframe { width:100%;height:98%;background-color:#ccc; }
+	  td.code { background-color:#aaa; }
+	  th { color:#6c6;  -moz-border-radius: 8px;border-radius:8px;
+		   border: solid 1px #444; padding:2px;}
+	  code { border: solid 1px black; padding: 2px; cursor: pointer}
+	  button, input { margin-top: 4px; }
+.repl button { background-color: #6cc; 
+	  -moz-border-radius: 8px;border-radius:8px;
+	  border: solid 1px #6aa; font-family: Helvetica;
+	  cursor:pointer; font-size: 1.5em; padding:3px;
+	  }
+button.disabled { background-color: #c66; }
+input { background-color: #ccc; border: solid 1px white; }
+.repl input { font-size: 1.2em; }
+#arg1, #arg2, #arg3 { border: none;  }
+#demo_out { padding:0px;padding-top:6px; border: none; color: #6cc; font-size: .7em;}
+#commands input, #commands button { font-size: 1em; margin: 0px; padding: 0px; }
+	  a { text-decoration: none; color: #66c; }
+	  form { margin:0;padding:0;}
+	</style>
+	<!--div style='position:absolute;right:0px;top:0px;z-index:0;'>
+	<a href="http://github.com/humbletim/ljs">
+	<img border="0" src="forkme_small_brt.png" alt="Fork me on GitHub"></a></div-->
+
+	<div style='xheight:100%;'>
+	  <table width='100%' style='z-index:1'>
+		<!--tr><td style='margin:0;padding:0;xheight:30px;width:100%;' id='headerp'>
+	        <div id='commands' style='padding-left:8px;'>
+			  <button onclick='clearoutput();'>clear</button>
+			  <button onclick='browtest();'>_VERSION</button>
+			  <button onclick='dump_G();'>_G</button>
+			  <input tabindex="2" size='6' type='text' value='(arg 1)' 
+				id='arg1' 
+				onfocus='this.onfocus=null;this.value="";'
+				onchange='this.onfucus=null;'
+				/>
+			  <input tabindex="3" type='text' size='6' value='(arg 2)' 
+				id='arg2' 
+				onchange='this.onfocus=null;'
+				onfocus='this.onfocus=null;this.value="";'
+				/>
+			  <input tabindex="4" type='text' size='6' value='(arg 3)' 
+				id='arg3' 
+				onchange='this.onfocus=null;'
+				onfocus='this.onfocus=null;this.value="";'
+				/>
+
+			</div>
+		  </td></tr-->
+		<tr><td valign="top" class='repl' height='50%'>
+			<form>
+<textarea tabindex="1" cols='80' rows='8' id='demo.in' style='width:90%;'>
+clear();
+-- account.lua
+-- from PiL 1, Chapter 16
+
+Account = {balance = 0}
+
+function Account:new (o, name)
+  o = o or {name=name}
+  setmetatable(o, self)
+  self.__index = self
+  return o
+end
+
+function Account:deposit (v)
+  self.balance = self.balance + v
+end
+
+function Account:withdraw (v)
+  if v > self.balance then error("insufficient funds on account "..self.name) end
+  self.balance = self.balance - v
+end
+
+function Account:show (title)
+  print(title or "", self.name, self.balance)
+end
+
+a = Account:new(nil,"demo")
+a:show("after creation")
+a:deposit(1000.00)
+a:show("after deposit")
+a:withdraw(100.00)
+a:show("after withdraw")
+
+-- this would raise an error
+--[[
+b = Account:new(nil,"DEMO")
+b:withdraw(100.00)
+--]]
+</textarea></form>
+			  <button id='demo.eval' class='disabled' disabled='disabled' onclick='evalcode();return false;' tabindex="5" style='font-size: 1.2em;width:20%;'>go</button>
+		  </td></tr>
+
+		<tr><th>
+<div style='width:32px;height:16px;float:left;background-color:#303034;' onclick='window._lastWidth=-1;handlrewidth();return false;'></div>
+	Lua VM in Javascript - <a href='http://github.com/humbletim/ljs'>ljs</a>
+<div style='width:32px;height:16px;float:right;background-color:#303034;' onclick='window._lastWidth=-1;handlrewidth();return false;'></div>
+	</th></tr>
+		  <tr>
+			<td height='200' style='background-color:#555;width:100%;' id='height_setter'>
+			<div style='margin:0;padding:0;position:relative;width:100%;height:100%;'>
+			  <div style='margin:0;padding:0;position:absolute;width:100%;height:100%;'>
+				<pre id='output'></pre>
+			  </div>
+			</div>
+		  </td>
+		</tr>
+		<tr><th id='demo_out'>&copy; <a href='http://github.com/humbletim/ljs'>http://github.com/humbletim/ljs</a></th></tr>
+	  </table>
+	</div>
+	<div style='height:100%;position:absolute;left:-99999px;top:0px;z-index:-9;' id='fiftyp'>....</div>
+  </body>
+</html>
