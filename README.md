@@ -1,13 +1,11 @@
 # ljs - Lua VM implemented in Javascript
 
-[DEMO #1](http://humbletim.github.com/ljs/demo/demo.html) 
- - ljs w/precompiled sample
-
-[DEMO #2](http://humbletim.github.com/ljs/demo/inbrowser.html)
- - ljs + precompiled [yeuliang](http://yueliang.luaforge.net/)
- 
-[DEMO #3](http://humbletim.github.com/ljs/demo/codemirror.html)
- - ljs + precompiled [yeuliang](http://yueliang.luaforge.net/) + [codemirror](http://codemirror.net) editor 
+* [DEMO #1](http://humbletim.github.com/ljs/demo/demo.html) 
+  (ljs w/precompiled sample)
+* [DEMO #2](http://humbletim.github.com/ljs/demo/inbrowser.html)
+  (ljs + precompiled [yeuliang](http://yueliang.luaforge.net/))
+* [DEMO #3](http://humbletim.github.com/ljs/demo/codemirror.html)
+ (ljs + precompiled [yeuliang](http://yueliang.luaforge.net/) + [codemirror](http://codemirror.net) editor)
 
 note: ljs is bytecode interpreter only
 (.lua scripts must be compiled to .luac in advance)
