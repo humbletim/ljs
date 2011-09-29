@@ -1,17 +1,17 @@
 ### FUTURE ROADMAP -- a possibility
 TODO: Create support for and tutorials showing:
 
-#### 1. How to bootstrap LJS into an existing JavaScript environment
+#### 1. How to bootstrap LJS into an existing *JavaScript* environment
 
 ```javascript
     // packaging LJS w/compiler as a CommonJS module
     var ret = require('ljs.lua').eval('return [[demo]]');
     
-    // packaging Lua modules as a self-contained CommonJS modules
+    // packaging Lua modules as self-contained CommonJS modules
     var myapi = require('myluamodule');
     alert(myapi.method('arg'));
 ```
-#### 2. How to map JavaScript APIs into LJS Lua
+#### 2. How to map JavaScript APIs into *Lua* environment
 
 ```lua
     -- DOM - document, window, etc.
