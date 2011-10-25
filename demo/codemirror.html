@@ -94,6 +94,9 @@ var stubs = {
 <!-- Lua VM -->
 <script type="text/javascript" src="lvm.js"></script>
 
+<!-- jsffi -->
+<script type="text/javascript" src="ffi.js"></script>
+
 <script type="text/javascript">
 
 var demo_out_default = "";
@@ -204,6 +207,8 @@ window.onload = function() {
 				 times.start = new Date().getTime();
 			   }
 			   BrowserLua.init();
+			   if (typeof init_jsffi == 'function')
+			     init_jsffi(BrowserLua.VM, BrowserLua._G);
 			   BrowserLua._G.setIndex(BrowserLua.VM.LValue("clear"),
 									  BrowserLua.VM.LValue(function(){clearoutput();return [];}));
 			   BrowserLua._init_evalString();
