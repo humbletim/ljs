@@ -9,7 +9,7 @@
 // EXAMPLE node: luac <input.lua> && node lvm.js
 // EXAMPLE browser: see demo.html
 
-var _VERSION = "Lua 5.1  {ljs=0.00121}"
+var _VERSION = "Lua 5.1  {ljs=0.00122}"
 
 // TODO: find a generic javascript logger
 // SEE: demo.html for browser stubs
@@ -1615,6 +1615,8 @@ if (typeof process != 'undefined') { // node
 							   testvm.LValue("./misc/frexp")
 							 ).index(testvm.LValue("frexp")));
 	}
+	require('./ffi').init_jsffi(testvm, _G);
+	if (!_G.value.ffi) throw "failed to init jsffi";
 
 	var f = testvm.loadstring(fs.readFileSync("luac.out", "binary"), _G);
 
