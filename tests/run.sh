@@ -1,6 +1,10 @@
 #!/bin/bash
 
-LVMJS="node src/ljs.lvm.js"
+if [ -z "$LVMJS" ] ; then
+  LVMJS="node tests/runljs.js"
+fi
+
+echo "LVMJS=$LVMJS"
 
 set -e
 
