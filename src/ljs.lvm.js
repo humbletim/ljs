@@ -1615,8 +1615,8 @@ if (typeof process != 'undefined') { // node
 							   testvm.LValue("./misc/frexp")
 							 ).index(testvm.LValue("frexp")));
 	}
-	require('./ffi').init_jsffi(testvm, _G);
-	if (!_G.value.ffi) throw "failed to init jsffi";
+	//require('./ffi').init_jsffi(testvm, _G);
+	//if (!_G.value.ffi) throw "failed to init jsffi";
 
 	var f = testvm.loadstring(fs.readFileSync("luac.out", "binary"), _G);
 

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+LVMJS="node src/ljs.lvm.js"
+
 set -e
 
 failed="";
@@ -18,7 +20,7 @@ echo "---------------------------------------------"
 echo "  tests/pass/*.lua"
 for script in tests/pass/*.lua; do
 	( luac "$script" && 
-		node lvm.js 2>&1 && 
+		$LVMJS 2>&1 && 
 		echo "  [  OK  ] $script" >>/dev/stderr
 	) > /dev/null || failtest "$script";
 	test_count=$(($test_count+1))
@@ -29,7 +31,7 @@ echo "---------------------------------------------"
 echo "  tests/fail/*.lua (nada == pass)"
 st=$test_count
 for script in tests/fail/*.lua; do
-	luac "$script" && node lvm.js >/dev/null 2>&1 && failtest "$script";
+	luac "$script" && $LVMJS >/dev/null 2>&1 && failtest "$script";
 	test_count=$(($test_count+1))
 done
 echo "  -- tested $(($test_count - $st)) .lua's"
