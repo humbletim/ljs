@@ -1,6 +1,8 @@
+/* -*- indent-tabs-mode: t; -*- */
 /** @license 
 ljs - Lua VM in JavaScript
 ljs.bytecode.js - binary chunk (bytecode/.luac) support
+Copyright (c) 2011-2012 Tim Dedischew
 Copyright (c) 2010 Matthew Wild
 extracted as sub-module 2011 Tim Dedischew
 MIT license
@@ -8,11 +10,20 @@ MIT license
 
 (function(exports) {
 
-function LBinaryChunk(vm, chunk, start, sourceName)
+function LBinaryChunk(vm, chunk, start, sourceName, _sizeFlag)
 {
 	this.chunk = chunk;
-	this.pos = start||12;
-	
+	this.pos = start||0;
+
+	/* initial "64-bit" (empirical) support */
+	if (start === undefined) {
+		this.pos = 8;
+		this.sizeFlag = this.readByte();
+		this.pos = 12;
+	} else {
+		this.sizeFlag = _sizeFlag;
+	}
+
 	this.sourceName = this.readString();
 	if(sourceName)
 		this.sourceName = sourceName;
@@ -73,7 +84,7 @@ function LBinaryChunk(vm, chunk, start, sourceName)
 	this.numPrototypes = this.readInt();
 	for(var i=0;i<this.numPrototypes;i++)
 	{
-		var p = new LBinaryChunk(vm, chunk, this.pos, this.sourceName);
+		var p = new LBinaryChunk(vm, chunk, this.pos, this.sourceName, this.sizeFlag, this.abort);
 		this.pos = p.pos;
 		this.prototypes.push(p);
 	}
@@ -104,6 +115,23 @@ function LBinaryChunk(vm, chunk, start, sourceName)
 }
 
 LBinaryChunk.prototype = {
+	toJSON: function() {
+		var dummy={};
+		for(var p in this) if (this.hasOwnProperty(p) && !/chunk|pos|sizeFlag/.test(p)) dummy[p] = this[p];
+		return JSON.stringify(dummy);
+	},
+	traceNext: function(n, readmeth, readarg) {
+		var oldpos = this.pos;
+		readmeth = readmeth || "readByte";
+		var bytes = [readmeth];
+		for(var i=0; i < n; i++) {
+			var v = this[readmeth](readarg);
+			if (typeof v == 'string') v = escape(v);
+			bytes.push((this.pos-oldpos)+":"+v);
+		}
+		this.pos = oldpos;
+		return bytes.join("\n");
+	},
 	readBytes: function (n)
 	{
 		return this.chunk.slice(this.pos, this.pos+=n);
@@ -114,13 +142,19 @@ LBinaryChunk.prototype = {
 	},
 	readInt: function ()
 	{
-		//FIXME: Endianness
+		//FIXME: Endianness?
 		return this.readByte() | (this.readByte()<<8)
 			| (this.readByte()<<16) | (this.readByte()<<24);
 	},
 	readString: function ()
 	{
 		var len = this.readInt();
+		//FIXME: Endianness?
+		if (this.sizeFlag == 8) {
+			var len2 = this.readInt();
+			//TODO: lookup bytecode format
+			if (len2 !== 0) throw new Error('64-bit support: larger strings? not yet handled (first,second ints: ' + [len,len2]+')');
+		}
 		return this.readBytes(len).substring(0,len-1);
 	},
 	readNumber: function ()
